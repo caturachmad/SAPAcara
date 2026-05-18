@@ -1,0 +1,8 @@
+vendor/
+uploads/events/*/
+uploads/proposals/
+uploads/rab/
+uploads/perijinan/
+*.log
+.env
+config/mail.php
