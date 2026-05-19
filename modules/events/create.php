@@ -85,38 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // 4. Otomatis buat approval awal kepada manager yang sesuai dengan level
-            $levelToTipe = ['TK' => 'manager_tk', 'SD' => 'manager_sd', 'SMP' => 'manager_smp'];
-            $tipeManager = $levelToTipe[$level] ?? null;
-            if ($tipeManager) {
-              // cari approver berdasarkan jabatan_sistem dan divisi
-              $approverId = null;
-              $q = $pdo->prepare("SELECT id FROM users WHERE jabatan_sistem = ? AND divisi = ? AND status='aktif' LIMIT 1");
-              $q->execute([$tipeManager, $level]);
-              $r = $q->fetch();
-              if ($r) $approverId = (int)$r['id'];
-              // fallback: cari siapa saja dengan jabatan_sistem
-              if (!$approverId) {
-                $q2 = $pdo->prepare("SELECT id FROM users WHERE jabatan_sistem = ? AND status='aktif' LIMIT 1");
-                $q2->execute([$tipeManager]);
-                $r2 = $q2->fetch();
-                if ($r2) $approverId = (int)$r2['id'];
-              }
-                if ($approverId) {
-                  $pdo->prepare("INSERT INTO approvals (event_id, approver_id, tipe_approver, urutan) VALUES (?,?,?,?)")
-                    ->execute([$eventId, $approverId, $tipeManager, 1]);
-                  // set event status ke pengajuan
-                  $pdo->prepare("UPDATE events SET status='pengajuan' WHERE id=?")->execute([$eventId]);
-                  // kirim email ke approver
-                  require_once __DIR__ . '/../../config/mail.php';
-                  $appr = $pdo->prepare("SELECT * FROM users WHERE id=?"); $appr->execute([$approverId]); $apUser = $appr->fetch();
-                  if ($apUser) {
-                    $html = mailTemplateApproval($apUser, ['judul'=>$judul,'tanggal_mulai'=>$tgl_mulai,'level'=>$level], $tipeManager);
-                    sendMail($apUser['email'], $apUser['nama'], 'Permintaan Approval: ' . $judul, $html);
-                    addNotif($pdo, $approverId, 'Permintaan Approval', "Terdapat permintaan approval untuk acara {$judul}", BASE_URL.'/modules/approvals/', 'info');
-                  }
-                }
-            }
+            // 4. Approval manager dibuat setelah proposal diajukan dari workspace
+            //    agar manager dapat melihat dokumen proposal yang lengkap terlebih dahulu.
 
             $pdo->commit();
 

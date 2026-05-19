@@ -16,6 +16,9 @@ $myRole->execute([$file['event_id'], $_SESSION['user_id']]); $role = $myRole->fe
 $isPic = isSuperAdmin() || ($role && $role['peran_acara']==='pic');
 $isInti = $role && in_array($role['peran_acara'],['pic','panitia_inti']);
 $isAdmin = $role && $role['is_event_admin'];
+$pendingApproval = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE event_id=? AND approver_id=? AND status='pending'");
+$pendingApproval->execute([$file['event_id'], $_SESSION['user_id']]);
+$isPendingApprover = (int)$pendingApproval->fetchColumn() > 0;
 
 $canSee = match($file['visibility']) {
   'all'      => (bool)$role || isSuperAdmin(),
@@ -24,7 +27,7 @@ $canSee = match($file['visibility']) {
   default    => false
 };
 
-if (!$canSee) { http_response_code(403); die('Akses ditolak.'); }
+if (!$canSee && !$isPendingApprover) { http_response_code(403); die('Akses ditolak.'); }
 
 $path = __DIR__ . '/../../uploads/' . $file['file_path'];
 if (!file_exists($path)) { http_response_code(404); die('File tidak ditemukan di server.'); }

@@ -55,8 +55,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
     $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowedExt)) $errors[] = 'Tipe file tidak didukung.';
 
-    // Batasi upload dokumen penting sampai manager menyetujui
-    $restricted = ['proposal','rab','jobdesk','perijinan'];
+    // Batasi dokumen yang hanya boleh dikirim setelah approval manager
+    $restricted = ['rab','perijinan'];
     if (in_array($type, $restricted) && !in_array($ev['status'], ['disetujui_manager','disetujui','berlangsung'])) {
       $errors[] = 'Dokumen ini hanya dapat diupload setelah approval manager.';
     }

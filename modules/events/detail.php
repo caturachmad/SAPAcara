@@ -17,6 +17,60 @@ if (!$ev) { header('Location: ' . BASE_URL . '/modules/events/'); exit; }
 
 $canManage = isSuperAdmin() || isPIC($id, $pdo) || isEventAdmin($id, $pdo);
 
+$hasProposalDocsQ = $pdo->prepare("SELECT COUNT(*) FROM event_files WHERE event_id=? AND file_type IN ('proposal','rundown','jobdesk','undangan','rab')");
+$hasProposalDocsQ->execute([$id]);
+$proposalDocsCount = (int)$hasProposalDocsQ->fetchColumn();
+
+$pendingManagerQ = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE event_id=? AND tipe_approver IN ('manager_tk','manager_sd','manager_smp') AND status='pending'");
+$pendingManagerQ->execute([$id]);
+$hasPendingManagerApproval = (int)$pendingManagerQ->fetchColumn() > 0;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_to_manager']) && isPIC($id, $pdo) && $ev['status'] === 'draft') {
+    if ($proposalDocsCount === 0) {
+        setFlash('Unggah minimal satu dokumen proposal/rundown terlebih dahulu sebelum mengajukan ke kepala sekolah.', 'warning');
+    } elseif ($hasPendingManagerApproval) {
+        setFlash('Sudah ada pengajuan kepala sekolah yang menunggu keputusan.', 'info');
+    } else {
+        $levelToTipe = ['TK' => 'manager_tk', 'SD' => 'manager_sd', 'SMP' => 'manager_smp'];
+        $tipeManager = $levelToTipe[$ev['level']] ?? null;
+        if (!$tipeManager) {
+            setFlash('Level acara tidak sesuai untuk pengajuan kepala sekolah. Hubungi admin.', 'warning');
+        } else {
+            $approverId = null;
+            $q = $pdo->prepare("SELECT id FROM users WHERE jabatan_sistem = ? AND divisi = ? AND status='aktif' LIMIT 1");
+            $q->execute([$tipeManager, $ev['level']]);
+            if ($r = $q->fetch()) {
+                $approverId = (int)$r['id'];
+            }
+            if (!$approverId) {
+                $q2 = $pdo->prepare("SELECT id FROM users WHERE jabatan_sistem = ? AND status='aktif' LIMIT 1");
+                $q2->execute([$tipeManager]);
+                if ($r2 = $q2->fetch()) {
+                    $approverId = (int)$r2['id'];
+                }
+            }
+            if ($approverId) {
+                $pdo->prepare("INSERT INTO approvals (event_id, approver_id, tipe_approver, urutan) VALUES (?,?,?,?)")
+                    ->execute([$id, $approverId, $tipeManager, 1]);
+                $pdo->prepare("UPDATE events SET status='pengajuan' WHERE id=?")->execute([$id]);
+                require_once __DIR__ . '/../../config/mail.php';
+                $approver = $pdo->prepare("SELECT * FROM users WHERE id=?");
+                $approver->execute([$approverId]);
+                if ($approverUser = $approver->fetch()) {
+                    $html = mailTemplateApproval($approverUser, $ev, $tipeManager);
+                    sendMail($approverUser['email'], $approverUser['nama'], 'Permintaan Approval Proposal: ' . $ev['judul'], $html);
+                    addNotif($pdo, $approverId, 'Permintaan Approval Proposal', "Proposal acara {$ev['judul']} telah diajukan. Mohon tinjau dan berikan keputusan.", BASE_URL.'/modules/approvals/', 'info');
+                }
+                setFlash('Proposal berhasil diajukan ke kepala sekolah.', 'success');
+            } else {
+                setFlash('Approver kepala sekolah belum ditemukan. Hubungi admin.', 'danger');
+            }
+        }
+    }
+    header('Location: ?id=' . $id);
+    exit;
+}
+
 $panitia = $pdo->prepare("
     SELECT ep.*, u.nama, u.divisi, u.jabatan
     FROM event_panitia ep
@@ -27,9 +81,15 @@ $panitia = $pdo->prepare("
 $panitia->execute([$id]);
 $daftarPanitia = $panitia->fetchAll();
 
+$filesQ = $pdo->prepare("SELECT f.*, u.nama AS uploader FROM event_files f LEFT JOIN users u ON u.id=f.uploaded_by WHERE f.event_id=? ORDER BY f.created_at DESC");
+$filesQ->execute([$id]);
+$files = $filesQ->fetchAll();
+
 $checklist = $pdo->prepare("SELECT * FROM event_checklist WHERE event_id=? ORDER BY urutan");
 $checklist->execute([$id]);
 $items = $checklist->fetchAll();
+
+$fileTypeLabel = ['rab'=>'RAB','rundown'=>'Rundown','proposal'=>'Proposal','perijinan'=>'Perijinan','jobdesk'=>'Jobdesk','undangan'=>'Undangan','lainnya'=>'Lainnya'];
 
 $statusLabel = [
     'draft'             => 'Draft',          'pengajuan'         => 'Pengajuan',
@@ -47,6 +107,15 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
   </a>
   <h5 class="mb-0 fw-700 flex-grow-1"><?= htmlspecialchars($ev['judul']) ?></h5>
   <span class="badge-status status-<?= $ev['status'] ?>"><?= $statusLabel[$ev['status']] ?? $ev['status'] ?></span>
+  <?php if (isPIC($id, $pdo) && $ev['status'] === 'draft' && !$hasPendingManagerApproval): ?>
+    <form method="POST" class="ms-3">
+      <button type="submit" name="submit_to_manager" value="1" class="btn btn-sm btn-warning">
+        <i class="bi bi-send-plus me-1"></i> Ajukan ke Kepala Sekolah
+      </button>
+    </form>
+  <?php elseif (isPIC($id, $pdo) && $ev['status'] === 'draft' && $hasPendingManagerApproval): ?>
+    <span class="badge bg-info text-dark ms-3">Pengajuan kepala sekolah sedang menunggu keputusan</span>
+  <?php endif; ?>
 </div>
 
 <div class="row g-3">
@@ -79,6 +148,49 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
       <div class="border-top pt-3">
         <div class="text-muted small mb-1">Deskripsi</div>
         <div class="small"><?= nl2br(htmlspecialchars($ev['deskripsi'])) ?></div>
+      </div>
+      <?php endif; ?>
+      <?php if (isPIC($id, $pdo) && $ev['status'] === 'draft'): ?>
+      <div class="alert alert-info mt-3 mb-0 small">
+        Upload proposal, rundown, daftar kepanitiaan, dan dokumen pendukung di halaman dokumen sebelum mengajukan ke kepala sekolah.
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- Dokumen -->
+    <div class="card-section mb-3">
+      <div class="card-header-bar">
+        <span><i class="bi bi-folder2-open me-2"></i>Dokumen Acara</span>
+        <?php if ($canManage): ?>
+        <a href="<?= BASE_URL ?>/modules/files/upload.php?event_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-upload me-1"></i> Upload File
+        </a>
+        <?php endif; ?>
+      </div>
+      <?php if (!empty($files)): ?>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light"><tr><th>Nama File</th><th>Tipe</th><th>Uploader</th><th>Tanggal</th><th>Aksi</th></tr></thead>
+          <tbody>
+            <?php foreach ($files as $f): ?>
+            <tr>
+              <td class="fw-600 small"><?= htmlspecialchars($f['nama_file']) ?></td>
+              <td class="small"><?= htmlspecialchars($fileTypeLabel[$f['file_type']] ?? $f['file_type']) ?></td>
+              <td class="small"><?= htmlspecialchars($f['uploader'] ?? '-') ?></td>
+              <td class="small"><?= date('d M Y H:i', strtotime($f['created_at'])) ?></td>
+              <td>
+                <a href="<?= BASE_URL ?>/modules/files/download.php?id=<?= $f['id'] ?>" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-download"></i>
+                </a>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <?php else: ?>
+      <div class="text-center text-muted py-4 small">
+        <i class="bi bi-folder2 d-block mb-1 fs-3"></i>Tidak ada dokumen acara.
       </div>
       <?php endif; ?>
     </div>
@@ -153,12 +265,6 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
     <div class="card-section p-3">
       <h6 class="fw-700 mb-2">Aksi Cepat</h6>
       <div class="d-grid gap-2">
-        <?php if ($ev['status'] === 'draft'): ?>
-        <a href="?id=<?=$id?>&action=submit" class="btn btn-primary btn-sm"
-           data-confirm="Ajukan acara ini untuk persetujuan?">
-          <i class="bi bi-send me-1"></i> Ajukan ke Manager
-        </a>
-        <?php endif; ?>
         <a href="<?= BASE_URL ?>/modules/events/edit.php?id=<?= $id ?>" class="btn btn-outline-secondary btn-sm">
           <i class="bi bi-pencil me-1"></i> Edit Acara
         </a>
@@ -169,12 +275,5 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
 </div>
 
 <?php
-// Handle quick action: submit
-if (isset($_GET['action']) && $_GET['action'] === 'submit' && $canManage && $ev['status'] === 'draft') {
-    $pdo->prepare("UPDATE events SET status='pengajuan' WHERE id=?")->execute([$id]);
-    setFlash('Acara berhasil diajukan untuk persetujuan.', 'success');
-    header('Location: ' . BASE_URL . '/modules/events/detail.php?id=' . $id);
-    exit;
-}
 require_once __DIR__ . '/../../includes/layout/footer.php';
 ?>

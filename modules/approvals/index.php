@@ -205,8 +205,12 @@ $statusLabel = ['pending'=>'Menunggu','approved'=>'Disetujui','rejected'=>'Ditol
                 </button>
               </div>
               <div class="col-auto ms-auto">
+                <a href="<?= BASE_URL ?>/modules/events/detail.php?id=<?= $ap['event_id'] ?>#dokumen"
+                   class="btn btn-outline-secondary btn-sm">
+                  <i class="bi bi-folder2-open me-1"></i> Lihat Dokumen
+                </a>
                 <a href="<?= BASE_URL ?>/modules/events/detail.php?id=<?= $ap['event_id'] ?>"
-                   class="btn btn-outline-primary btn-sm">
+                   class="btn btn-outline-primary btn-sm ms-1">
                   <i class="bi bi-eye me-1"></i> Detail Acara
                 </a>
               </div>
