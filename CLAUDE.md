@@ -1,15 +1,11 @@
 # Claude Code — project context
 
 
-
-
-
-
 <!-- cloude-code-toolbox:mcp-skills-awareness-begin -->
 
 ### MCP & Skills awareness (Cloude Code ToolBox)
 
-_Last synced: 2026-05-19T07:23:16.259Z._
+_Last synced: 2026-05-21T06:49:46.154Z._
 
 - **Full report:** `.claude/cloude-code-toolbox-mcp-skills-awareness.md` in this workspace (auto-overwritten on each scan). Use it as ground truth for configured servers and skill folders.
 - **MCP:** For **live tools** in Claude Code, enable the matching server via `/mcp`. Servers are configured in `~/.claude.json` (user) and `.mcp.json` (project).
@@ -34,7 +30,7 @@ _None found (or no workspace open)._
 
 #### User skills
 
-_None found._
+- **skill-creator** — `/home/caturachmadw/.claude/skills/skill-creator` — Create new skills, modify and improve existing skills. Use when users want to create a skill from scratch, edit, or optimize an existing skill.
 
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
 <!-- claude-code-memory-bank:begin -->

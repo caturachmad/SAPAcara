@@ -27,14 +27,19 @@ function sNav(string $url, string $icon, string $label, string $path, string $ba
     <?php sNav(BASE_URL.'/modules/events/',              'calendar3',  'Semua Acara',    $path); ?>
     <?php sNav(BASE_URL.'/modules/events/create.php',    'plus-circle','Buat Acara Baru',$path); ?>
 
-    <!-- Hanya superadmin -->
-    <?php if ($role === 'superadmin'): ?>
-    <div class="nav-section">Administrasi</div>
-    <?php sNav(BASE_URL.'/modules/approvals/',     'check2-circle',     'Approval',       $path); ?>
-    <?php sNav(BASE_URL.'/modules/users/',         'person-gear',       'Manajemen SDM',  $path); ?>
-    <?php sNav(BASE_URL.'/modules/users/import.php','file-earmark-excel','Import Excel',  $path); ?>
-    <?php sNav(BASE_URL.'/modules/dashboard/',     'grid-1x2-fill',     'Admin Panel',    $path); ?>
+    <!-- Administrasi: Approval untuk superadmin/admin -->
+    <?php if ($role === 'superadmin' || $role === 'admin'): ?>
+      <div class="nav-section">Administrasi</div>
+      <?php sNav(BASE_URL.'/modules/approvals/', 'check2-circle', 'Approval', $path); ?>
     <?php endif; ?>
+
+    <!-- Hanya superadmin: Manajemen SDM -->
+    <?php if ($role === 'superadmin'): ?>
+      <?php sNav(BASE_URL.'/modules/users/',         'person-gear',       'Manajemen SDM',  $path); ?>
+      <?php sNav(BASE_URL.'/modules/users/import.php','file-earmark-excel','Import Excel',  $path); ?>
+      <?php sNav(BASE_URL.'/modules/dashboard/',     'grid-1x2-fill',     'Admin Panel',    $path); ?>
+    <?php endif; ?>
+
 
     <!-- Semua role -->
     <div class="nav-section">Akun</div>

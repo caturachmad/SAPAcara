@@ -1,6 +1,6 @@
 # Cloude Code ToolBox — MCP & Skills awareness
 
-_Generated: 2026-05-19T07:23:16.218Z_
+_Generated: 2026-05-21T06:49:46.121Z_
 
 ## How to use this report
 
@@ -33,7 +33,8 @@ _None found (or no workspace open)._
 
 ### User-scoped
 
-_None found._
+- **skill-creator** — `/home/caturachmadw/.claude/skills/skill-creator`
+  - Create new skills, modify and improve existing skills. Use when users want to create a skill from scratch, edit, or optimize an existing skill.
 
 ---
 

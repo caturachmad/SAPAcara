@@ -10,7 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_user'])) {
     $email    = trim($_POST['email'] ?? '');
     $divisi   = trim($_POST['divisi'] ?? '');
     $jabatan  = trim($_POST['jabatan'] ?? '');
-    $roleS    = in_array($_POST['role_sistem'], ['superadmin','staff']) ? $_POST['role_sistem'] : 'staff';
+    $roleS    = in_array($_POST['role_sistem'], ['superadmin','admin','staff']) ? $_POST['role_sistem'] : 'staff';
+
     $jabatanS = in_array($_POST['jabatan_sistem'], ['staff','bendahara_tertinggi','kepala_sekolah','manager_tk','manager_sd','manager_smp'])
                ? $_POST['jabatan_sistem'] : 'staff';
 
@@ -90,7 +91,8 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
 // ── Query ──
 $search    = $_GET['q']      ?? '';
 $divFilter = $_GET['divisi'] ?? '';
-$roleFilter= $_GET['role']   ?? '';
+    $roleFilter= $_GET['role']   ?? '';
+
 $where = ['1=1']; $params = [];
 if ($search)    { $where[] = '(nama LIKE ? OR email LIKE ?)'; $params[] = "%$search%"; $params[] = "%$search%"; }
 if ($divFilter) { $where[] = 'divisi = ?';        $params[] = $divFilter; }

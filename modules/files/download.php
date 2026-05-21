@@ -5,8 +5,6 @@ if (session_status()===PHP_SESSION_NONE) session_start();
 requireLogin();
 
 $id = (int)($_GET['id'] ?? 0);
-$mode = $_GET['mode'] ?? 'download';
-
 $stmt = $pdo->prepare("SELECT * FROM event_files WHERE id=?");
 $stmt->execute([$id]); $file = $stmt->fetch();
 if (!$file) { http_response_code(404); die('File tidak ditemukan.'); }
@@ -16,8 +14,8 @@ $myRole = $pdo->prepare("SELECT * FROM event_panitia WHERE event_id=? AND user_i
 $myRole->execute([$file['event_id'], $_SESSION['user_id']]); $role = $myRole->fetch();
 
 $isPic = isSuperAdmin() || ($role && $role['peran_acara']==='pic');
-$isInti = $role && in_array($role['peran_acara'],['pic','panitia_inti'], true);
-$isAdmin = $role && (int)($role['is_event_admin'] ?? 0) === 1;
+$isInti = $role && in_array($role['peran_acara'],['pic','panitia_inti']);
+$isAdmin = $role && $role['is_event_admin'];
 $pendingApproval = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE event_id=? AND approver_id=? AND status='pending'");
 $pendingApproval->execute([$file['event_id'], $_SESSION['user_id']]);
 $isPendingApprover = (int)$pendingApproval->fetchColumn() > 0;
@@ -35,10 +33,8 @@ $path = __DIR__ . '/../../uploads/' . $file['file_path'];
 if (!file_exists($path)) { http_response_code(404); die('File tidak ditemukan di server.'); }
 
 $mime = mime_content_type($path) ?: 'application/octet-stream';
-$isInline = $mode === 'preview' || in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'text/plain'], true);
-
 header('Content-Type: ' . $mime);
-header('Content-Disposition: ' . ($isInline ? 'inline' : 'attachment') . '; filename="' . addslashes($file['file_original']) . '"');
+header('Content-Disposition: attachment; filename="' . addslashes($file['file_original']) . '"');
 header('Content-Length: ' . filesize($path));
 header('Cache-Control: private, no-cache');
 readfile($path);
