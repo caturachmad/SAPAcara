@@ -164,7 +164,7 @@ $riwayat->execute([$uid]); $riwayatList = $riwayat->fetchAll();
                     <span class="badge bg-secondary" style="font-size:.65rem"><?= $r['level'] ?></span>
                     <span class="text-muted" style="font-size:.7rem"> <?= date('d M Y', strtotime($r['tanggal_mulai'])) ?></span>
                   </td>
-                  <td><small><?= $r['peran_acara'] ?></small></td>
+                  <td><small><?= $r['peran_acara'] === 'pic' ? 'PIC' : ($r['bagian'] ? htmlspecialchars($r['bagian']) : 'Panitia') ?></small></td>
                   <td><small><?= htmlspecialchars($r['bagian'] ?? '-') ?></small></td>
                   <td>
                     <?php $kc=['pending'=>'warning','bersedia'=>'success','tidak_bisa'=>'danger']; ?>

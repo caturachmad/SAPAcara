@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS events (
   status ENUM('draft','pengajuan','disetujui_manager','proposal_dibuat','rab_diajukan','perijinan','disetujui','berlangsung','selesai','ditolak') DEFAULT 'draft',
   pic_id INT,
   template_dari_event_id INT NULL,
+  wa_group_link VARCHAR(500) NULL,
   link_dokumentasi VARCHAR(500) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -154,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
         <label class="form-label">Siapa yang Bisa Lihat?</label>
         <select name="visibility" class="form-select">
           <option value="all">Semua Panitia</option>
-          <option value="inti" selected>Panitia Inti & PIC</option>
+          <option value="inti" selected>Panitia & PIC</option>
           <option value="pic_only">PIC Saja</option>
         </select>
       </div>
@@ -162,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
         <label class="form-label">Siapa yang Bisa Edit/Hapus?</label>
         <select name="can_edit_by" class="form-select">
           <option value="pic_only">PIC & Event Admin saja</option>
-          <option value="inti" selected>Panitia Inti & PIC</option>
+          <option value="inti" selected>Panitia & PIC</option>
         </select>
       </div>
       <div class="col-12 d-flex gap-2">

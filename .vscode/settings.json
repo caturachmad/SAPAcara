@@ -8,5 +8,11 @@
     "cloude-code-toolbox.thinkingMachineMode.includeGit": true,
     "cloude-code-toolbox.thinkingMachineMode.includeDiagnostics": true,
     "cloude-code-toolbox.thinkingMachineMode.appendNotepad": true,
-    "cloude-code-toolbox.thinkingMachineMode.openChat": true
+    "cloude-code-toolbox.thinkingMachineMode.openChat": true,
+    "chat.tools.terminal.autoApprove": {
+        "/^php -l modules/users/index\\.php$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }

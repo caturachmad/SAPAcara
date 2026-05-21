@@ -98,7 +98,7 @@ $statusLabel = [
     'disetujui'         => 'Disetujui',      'berlangsung'       => 'Berlangsung',
     'selesai'           => 'Selesai',        'ditolak'           => 'Ditolak',
 ];
-$peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'Panitia Support'];
+$peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia','panitia_support'=>'Panitia'];
 ?>
 
 <div class="d-flex align-items-center gap-2 mb-3">
@@ -216,7 +216,7 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
                 <div class="fw-600 small"><?= htmlspecialchars($p['nama']) ?></div>
                 <div class="text-muted" style="font-size:.75rem"><?= htmlspecialchars($p['divisi'] ?? '') ?></div>
               </td>
-              <td><span class="badge bg-secondary"><?= $peranLabel[$p['peran_acara']] ?? $p['peran_acara'] ?></span></td>
+              <td><span class="badge bg-secondary"><?= $p['peran_acara'] === 'pic' ? 'PIC' : ($p['bagian'] ? htmlspecialchars($p['bagian']) : 'Panitia') ?></span></td>
               <td class="small"><?= htmlspecialchars($p['bagian'] ?? '-') ?></td>
               <td>
                 <?php if ($p['status_konfirmasi']==='bersedia'): ?>

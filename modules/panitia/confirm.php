@@ -23,7 +23,37 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['alasan'])) {
     $jawab  = 'tidak_bisa';
 }
 
-if ($jawab === 'tidak_bisa' && $_SERVER['REQUEST_METHOD']!=='POST' && !isset($_POST['alasan'])) {
+if ($jawab === 'bersedia' && !isset($_GET['confirm']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    ?>
+    <!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Konfirmasi Bersedia</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body style="background:#f1f5f9;display:flex;align-items:center;justify-content:center;min-height:100vh">
+    <div style="max-width:520px;width:100%;margin:24px auto">
+      <div class="card shadow border-0" style="border-radius:16px;overflow:hidden">
+        <div style="background:#10b981;padding:24px;text-align:center">
+          <div style="font-size:2.5rem">✅</div>
+          <h4 style="color:#fff;margin:8px 0 0">Konfirmasi Bersedia</h4>
+        </div>
+        <div class="p-4">
+          <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px;border-left:4px solid #10b981">
+            <strong><?= htmlspecialchars($row['judul']) ?></strong><br>
+            <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= $row['level'] ?></small>
+          </div>
+          <p>Kamu akan mengonfirmasi bahwa kamu bersedia menjadi panitia untuk acara ini.</p>
+          <div class="d-flex gap-2 mb-3">
+            <a href="?token=<?= urlencode($token) ?>&jawab=bersedia&confirm=1" class="btn btn-success flex-grow-1">Ya, Saya Bersedia</a>
+            <a href="?token=<?= urlencode($token) ?>&jawab=tidak_bisa" class="btn btn-outline-danger flex-grow-1">Tolak</a>
+          </div>
+          <p class="fs-12 text-muted">Jika tombol tidak bekerja, salin dan tempel link ini ke browser:</p>
+          <p class="fs-12 text-break"><a href="<?= htmlspecialchars(BASE_URL . '/modules/panitia/confirm.php?token=' . urlencode($token) . '&jawab=bersedia&confirm=1') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars(BASE_URL . '/modules/panitia/confirm.php?token=' . urlencode($token) . '&jawab=bersedia&confirm=1') ?></a></p>
+        </div>
+      </div>
+    </div></body></html>
+    <?php exit;
+}
+
+if ($jawab === 'tidak_bisa' && $_SERVER['REQUEST_METHOD']!=='POST') {
     // Tampilkan form alasan sebelum konfirmasi tolak
     ?>
     <!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -58,9 +88,14 @@ if ($jawab === 'tidak_bisa' && $_SERVER['REQUEST_METHOD']!=='POST' && !isset($_P
     <?php exit;
 }
 
-// Simpan konfirmasi
-$pdo->prepare("UPDATE event_panitia SET status_konfirmasi=?, alasan_tolak=?, confirmed_at=NOW() WHERE token_konfirmasi=?")
-    ->execute([$jawab, $alasan ?: null, $token]);
+ // Simpan konfirmasi
+try {
+    $pdo->prepare("UPDATE event_panitia SET status_konfirmasi=?, catatan=?, confirmed_at=NOW() WHERE token_konfirmasi=?")
+        ->execute([$jawab, $jawab === 'tidak_bisa' ? ($alasan ?: null) : null, $token]);
+} catch (Exception $e) {
+    error_log('[panitia/confirm] failed to update confirmation for token=' . $token . ' - ' . $e->getMessage());
+    die('<div style="font-family:Arial;text-align:center;padding:60px"><h2>❌ Terjadi Kesalahan</h2><p>Gagal menyimpan konfirmasi. Coba lagi atau hubungi PIC acara.</p></div>');
+}
 
 // Jika yang dikonfirmasi adalah PIC dan konfirmasi diterima, pastikan dia menjadi Event Admin juga
 if ($jawab === 'bersedia' && isset($row['peran_acara']) && $row['peran_acara'] === 'pic') {

@@ -87,6 +87,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 });
 
+window.submitStatus = (status) => {
+  const statusInput = document.getElementById('statusInput');
+  const statusForm = document.getElementById('statusForm');
+  if (!statusInput || !statusForm) return;
+  statusInput.value = status;
+  statusForm.submit();
+};
+
 /* ── Utility ── */
 window.formatRupiah = (n) => 'Rp ' + parseInt(n || 0).toLocaleString('id-ID');
 window.sisaHari = (tgl) => Math.ceil((new Date(tgl) - new Date()) / 86400000);

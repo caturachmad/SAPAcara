@@ -13,6 +13,18 @@ $templates = $pdo->query(
 $errors = [];
 $old    = [];   // untuk repopulate form jika ada error
 
+function mergeRoleLabel(string $existing, string $label): string {
+    $existing = trim($existing);
+    if ($existing === '') {
+        return $label;
+    }
+    $parts = array_map('trim', explode(' / ', $existing));
+    if (!in_array($label, $parts, true)) {
+        $parts[] = $label;
+    }
+    return implode(' / ', array_values(array_filter($parts)));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old = $_POST;
 
@@ -56,16 +68,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pic->execute([$eventId, $_SESSION['user_id']]);
 
             // 3. Daftarkan kepanitiaan inti jika disediakan (bendahara, sekretaris, kehumasan)
+            //    Panitia yang sama boleh dipilih di lebih dari satu jabatan (double job).
             $coreRoles = [
               'bendahara' => 'Bendahara Acara',
               'sekretaris' => 'Sekretaris Acara',
               'kehumasan' => 'Kehumasan/Publikasi'
             ];
+            $findExisting = $pdo->prepare("SELECT * FROM event_panitia WHERE event_id = ? AND user_id = ? LIMIT 1");
+            $insertCore = $pdo->prepare("INSERT INTO event_panitia (event_id,user_id,peran_acara,bagian,is_double_job,status_konfirmasi) VALUES (?,?,?,?,?,?)");
+            $updateCore = $pdo->prepare("UPDATE event_panitia SET bagian = ?, is_double_job = 1 WHERE id = ?");
             foreach ($coreRoles as $field => $label) {
               $uid = isset($_POST[$field]) && is_numeric($_POST[$field]) ? (int)$_POST[$field] : 0;
-              if ($uid) {
-                $insCore = $pdo->prepare("INSERT INTO event_panitia (event_id,user_id,peran_acara,bagian,status_konfirmasi) VALUES (?,?,?,?,?)");
-                $insCore->execute([$eventId, $uid, 'panitia_inti', $label, 'bersedia']);
+              if (!$uid) {
+                continue;
+              }
+
+              $findExisting->execute([$eventId, $uid]);
+              $existing = $findExisting->fetch();
+
+              if ($existing) {
+                $mergedBagian = mergeRoleLabel((string)($existing['bagian'] ?? ''), $label);
+                $updateCore->execute([$mergedBagian, $existing['id']]);
+              } else {
+                $insertCore->execute([$eventId, $uid, 'panitia_inti', $label, 0, 'bersedia']);
               }
             }
 
@@ -174,7 +199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <!-- Kepanitiaan Inti -->
       <div class="mb-3">
-        <label class="form-label">Kepanitiaan Inti (opsional)</label>
+        <label class="form-label">Kepanitiaan Inti & Double Job (opsional)</label>
+        <div class="form-text mb-2">Satu orang boleh dipilih di lebih dari satu jabatan. Jika seseorang sudah jadi PIC, ia tetap bisa merangkap sekretaris, bendahara, atau kehumasan.</div>
         <div class="row g-2">
           <div class="col-md-4">
             <label class="form-label">Bendahara Acara</label>

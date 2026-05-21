@@ -28,20 +28,33 @@ function sendMail(string $to, string $toName, string $subject, string $html): bo
         $mail->send();
         return true;
     } catch (Exception $e) {
-        error_log('[SAPAcara Mail Error] ' . $mail->ErrorInfo);
+        error_log('[SAPAcara Mail Error] ' . $mail->ErrorInfo . ' / ' . $e->getMessage());
+        if (sendMailFallback($to, $toName, $subject, $html)) {
+            error_log('[SAPAcara Mail Fallback] Sent using PHP mail() fallback to ' . $to);
+            return true;
+        }
         return false;
     }
+}
+
+function sendMailFallback(string $to, string $toName, string $subject, string $html): bool {
+    $headers  = "MIME-Version: 1.0\r\n";
+    $headers .= "Content-type: text/html; charset=UTF-8\r\n";
+    $headers .= "From: " . MAIL_FROM_NAME . " <" . MAIL_FROM . ">\r\n";
+    $headers .= "Reply-To: " . MAIL_FROM . "\r\n";
+    return mail($to, $subject, $html, $headers);
 }
 
 function mailTemplatePanitia(array $user, array $event, string $bagian, string $token): string {
     $tglMulai   = date('d M Y', strtotime($event['tanggal_mulai']));
     $tglSelesai = date('d M Y', strtotime($event['tanggal_selesai']));
     $tglInfo    = $tglMulai === $tglSelesai ? $tglMulai : "$tglMulai – $tglSelesai";
-    $urlYa      = BASE_URL . '/modules/panitia/confirm.php?token=' . $token . '&jawab=bersedia';
-    $urlTidak   = BASE_URL . '/modules/panitia/confirm.php?token=' . $token . '&jawab=tidak_bisa';
+    $urlYa      = BASE_URL . '/modules/panitia/confirm.php?token=' . urlencode($token) . '&jawab=bersedia';
+    $urlTidak   = BASE_URL . '/modules/panitia/confirm.php?token=' . urlencode($token) . '&jawab=tidak_bisa';
+    $bagianText = $bagian ? htmlspecialchars($bagian) : 'Panitia';
     return mailLayout('Undangan Panitia: ' . $event['judul'], "
         <p>Halo, <strong>" . htmlspecialchars($user['nama']) . "</strong>!</p>
-        <p>Kamu diundang sebagai <strong style='color:#1a3a5c'>" . htmlspecialchars($bagian) . "</strong> dalam acara:</p>
+        <p>Kamu diundang sebagai <strong style='color:#1a3a5c'>" . $bagianText . "</strong> dalam acara:</p>
         <div style='background:#f0f4f8;border-left:4px solid #245a8a;padding:16px;border-radius:0 8px 8px 0;margin:16px 0'>
             <h3 style='margin:0 0 8px;color:#1a3a5c'>" . htmlspecialchars($event['judul']) . "</h3>
             <p style='margin:4px 0'>📅 $tglInfo</p>
@@ -50,9 +63,11 @@ function mailTemplatePanitia(array $user, array $event, string $bagian, string $
         </div>
         <p>Konfirmasi kesediaanmu:</p>
         <div style='text-align:center;margin:24px 0'>
-            <a href='$urlYa' style='background:#10b981;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:4px'>✅ Saya Bersedia</a>
-            <a href='$urlTidak' style='background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:4px'>❌ Tidak Bisa</a>
+            <a href='$urlYa' target='_blank' rel='noopener noreferrer' style='background:#10b981;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:4px'>✅ Saya Bersedia</a>
+            <a href='$urlTidak' target='_blank' rel='noopener noreferrer' style='background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:4px'>❌ Tidak Bisa</a>
         </div>
+        <p style='font-size:12px;color:#64748b;text-align:center;margin-bottom:4px'>Jika tombol tidak berfungsi, silakan salin dan tempel link berikut di browser:</p>
+        <p style='font-size:12px;color:#0f172a;text-align:center;word-break:break-all'><a href='$urlYa' target='_blank' rel='noopener noreferrer' style='color:#1a3a5c;text-decoration:underline'>$urlYa</a></p>
         <p style='font-size:12px;color:#94a3b8;text-align:center'>Link berlaku 7 hari sejak email ini diterima.</p>
     ");
 }

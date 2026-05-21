@@ -55,8 +55,8 @@ $totalBersedia  = count(array_filter($list, fn($r) => $r['status_konfirmasi'] ==
 $totalPending   = count(array_filter($list, fn($r) => $r['status_konfirmasi'] === 'pending'));
 $totalTidakBisa = count(array_filter($list, fn($r) => $r['status_konfirmasi'] === 'tidak_bisa'));
 
-$peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'Support'];
-$peranColor = ['pic'=>'bg-primary','panitia_inti'=>'bg-info text-dark','panitia_support'=>'bg-secondary'];
+$peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia','panitia_support'=>'Panitia'];
+$peranColor = ['pic'=>'bg-primary','panitia_inti'=>'bg-secondary','panitia_support'=>'bg-secondary'];
 ?>
 
 <div class="page-header">
@@ -168,7 +168,9 @@ $peranColor = ['pic'=>'bg-primary','panitia_inti'=>'bg-info text-dark','panitia_
               <div class="fs-12" style="color:var(--text-muted)"><?= date('d M Y', strtotime($p['tanggal_mulai'])) ?></div>
             </td>
             <td>
-              <span class="badge <?= $peranColor[$p['peran_acara']] ?>"><?= $peranLabel[$p['peran_acara']] ?></span>
+              <span class="badge <?= $p['peran_acara'] === 'pic' ? 'bg-primary' : 'bg-secondary' ?>">
+                <?= $p['peran_acara'] === 'pic' ? 'PIC' : ($p['bagian'] ? htmlspecialchars($p['bagian']) : 'Panitia') ?>
+              </span>
               <?php if ($p['is_event_admin']): ?>
                 <span class="badge bg-warning text-dark ms-1" title="Event Admin"><i class="bi bi-star-fill"></i></span>
               <?php endif; ?>

@@ -7,6 +7,8 @@
 - Upload dokumen dibatasi sampai approval manager selesai untuk dokumen penting (proposal, RAB, jobdesk, perijinan).
 - Saat RAB diupload, approval untuk `bendahara_tertinggi` dibuat otomatis dan notifikasi + email dikirim.
 - Email templating disiapkan di `config/mail.php` dan dipakai untuk approval & undangan panitia.
+- Pengundangan panitia diperbarui agar menggunakan `bagian` dinamis sebagai peran/divisi sebenarnya, tanpa memaksa kategori `Panitia Inti` atau `Panitia Support`.
+- UI undang panitia ditingkatkan: dropdown bagian dengan opsi custom, dan pemilihan banyak SDM sekaligus.
 - End-to-end test script (`e2e_test.php`) dibuat dan dijalankan pada environment lokal untuk memverifikasi alur.
 
 **Not started / backlog**

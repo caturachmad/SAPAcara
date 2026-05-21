@@ -3,16 +3,56 @@ $pageTitle = 'Manajemen SDM';
 require_once __DIR__ . '/../../includes/layout/header.php';
 if (!isSuperAdmin()) { header('Location: ' . BASE_URL . '/modules/dashboard/select.php'); exit; }
 
-// ── Handle ubah role ──
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ubah_role'])) {
-    $tid           = (int)$_POST['target_id'];
-    $roleS         = in_array($_POST['role_sistem'],['superadmin','staff']) ? $_POST['role_sistem'] : 'staff';
-    $jabatanS      = in_array($_POST['jabatan_sistem'],['staff','bendahara_tertinggi','kepala_sekolah','manager_tk','manager_sd','manager_smp'])
-                     ? $_POST['jabatan_sistem'] : 'staff';
-    if ($tid !== 1 || $roleS === 'superadmin') { // Protect user ID 1
-        $pdo->prepare("UPDATE users SET role_sistem=?, jabatan_sistem=? WHERE id=?")
-            ->execute([$roleS, $jabatanS, $tid]);
-        setFlash('Role SDM berhasil diperbarui.', 'success');
+// ── Handle edit user ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_user'])) {
+    $tid      = (int)$_POST['target_id'];
+    $nama     = trim($_POST['nama'] ?? '');
+    $email    = trim($_POST['email'] ?? '');
+    $divisi   = trim($_POST['divisi'] ?? '');
+    $jabatan  = trim($_POST['jabatan'] ?? '');
+    $roleS    = in_array($_POST['role_sistem'], ['superadmin','staff']) ? $_POST['role_sistem'] : 'staff';
+    $jabatanS = in_array($_POST['jabatan_sistem'], ['staff','bendahara_tertinggi','kepala_sekolah','manager_tk','manager_sd','manager_smp'])
+               ? $_POST['jabatan_sistem'] : 'staff';
+
+    if ($tid !== 1 || $roleS === 'superadmin') {
+        $params = [$nama, $email, $divisi, $jabatan, $roleS, $jabatanS];
+        $sql = "UPDATE users SET nama=?, email=?, divisi=?, jabatan=?, role_sistem=?, jabatan_sistem=?";
+        if (isset($_POST['reset_password'])) {
+            $sql .= ", password=?";
+            $params[] = password_hash('password', PASSWORD_DEFAULT);
+        }
+        $sql .= " WHERE id=?";
+        $params[] = $tid;
+        $pdo->prepare($sql)->execute($params);
+        setFlash('Data SDM berhasil diperbarui.', 'success');
+    }
+    header('Location: ?'); exit;
+}
+
+// ── Handle bulk action ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
+    $ids = array_filter(array_map('intval', $_POST['bulk_user_ids'] ?? []));
+    if (!empty($ids)) {
+        $ids = array_values(array_filter($ids, fn($id) => $id !== 1));
+        if (!empty($ids)) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            if ($_POST['bulk_action_type'] === 'delete') {
+                $pdo->prepare("DELETE FROM event_panitia WHERE user_id IN ($placeholders)")
+                    ->execute($ids);
+                $pdo->prepare("DELETE FROM notifications WHERE user_id IN ($placeholders)")
+                    ->execute($ids);
+                $pdo->prepare("DELETE FROM users WHERE id IN ($placeholders)")
+                    ->execute($ids);
+                setFlash('SDM terpilih berhasil dihapus.', 'success');
+            } elseif ($_POST['bulk_action_type'] === 'divisi') {
+                $divisi = trim($_POST['bulk_divisi'] ?? '');
+                if ($divisi) {
+                    $pdo->prepare("UPDATE users SET divisi=? WHERE id IN ($placeholders)")
+                        ->execute(array_merge([$divisi], $ids));
+                    setFlash('Divisi SDM terpilih diperbarui.', 'success');
+                }
+            }
+        }
     }
     header('Location: ?'); exit;
 }
@@ -35,12 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tambah_user'])) {
     header('Location: ?'); exit;
 }
 
-// ── Handle toggle status ──
-if (isset($_GET['toggle']) && is_numeric($_GET['toggle'])) {
-    $tid = (int)$_GET['toggle'];
+// ── Handle delete user ──
+if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
+    $tid = (int)$_GET['delete'];
     if ($tid !== 1) {
-        $pdo->prepare("UPDATE users SET status = IF(status='aktif','nonaktif','aktif') WHERE id=?")->execute([$tid]);
-        setFlash('Status SDM diperbarui.', 'success');
+        $pdo->prepare("DELETE FROM event_panitia WHERE user_id=?")->execute([$tid]);
+        $pdo->prepare("DELETE FROM notifications WHERE user_id=?")->execute([$tid]);
+        $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$tid]);
+        setFlash('SDM berhasil dihapus.', 'success');
     }
     header('Location: ?'); exit;
 }
@@ -56,7 +98,11 @@ if ($roleFilter){ $where[] = 'role_sistem = ?';   $params[] = $roleFilter; }
 $stmt = $pdo->prepare("SELECT * FROM users WHERE " . implode(' AND ', $where) . " ORDER BY role_sistem DESC, jabatan_sistem, divisi, nama");
 $stmt->execute($params); $users = $stmt->fetchAll();
 
-$divisiOpts = ['TK','SD','SMP','Umum','IT'];
+// ── Fetch divisions from DB ──
+$divStmt = $pdo->prepare("SELECT nama FROM divisions ORDER BY urutan ASC");
+$divStmt->execute();
+$divisiOpts = array_column($divStmt->fetchAll(), 'nama');
+
 $jabatanSistemLabel = [
     'staff'               => ['Staff Biasa',          'secondary', ''],
     'manager_tk'          => ['Manager TK',            'primary',   'bi-person-workspace'],
@@ -127,13 +173,23 @@ $jabatanSistemLabel = [
   </form>
 </div>
 
-<!-- Tabel SDM -->
+<div class="text-muted fs-12 mb-2">Pilih beberapa SDM untuk pindah divisi atau hapus sekaligus.</div>
+<div id="bulkActionsBar" class="d-flex flex-wrap align-items-center gap-2 mb-3 d-none">
+  <button id="bulkEditBtn" class="btn btn-outline-primary btn-sm" disabled>
+    <i class="bi bi-pencil-square me-1"></i> Bulk Edit
+  </button>
+  <button id="bulkDeactivateBtn" class="btn btn-outline-danger btn-sm" disabled>
+    <i class="bi bi-trash me-1"></i> Bulk Hapus
+  </button>
+</div>
+
 <div class="card">
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table align-middle mb-0">
         <thead>
           <tr>
+            <th style="width:40px"><input type="checkbox" id="selectAllUsers"></th>
             <th>Nama SDM</th>
             <th>Email</th>
             <th>Divisi</th>
@@ -148,6 +204,11 @@ $jabatanSistemLabel = [
           [$jsLabel, $jsColor, $jsIcon] = $jabatanSistemLabel[$u['jabatan_sistem'] ?? 'staff'] ?? ['Staff','secondary',''];
         ?>
           <tr>
+            <td class="text-center align-middle">
+              <?php if ($u['id'] !== 1): ?>
+                <input type="checkbox" class="user-select-checkbox" value="<?= $u['id'] ?>">
+              <?php endif; ?>
+            </td>
             <td>
               <div class="d-flex align-items-center gap-2">
                 <div class="avatar avatar-sm"
@@ -156,7 +217,13 @@ $jabatanSistemLabel = [
                 </div>
                 <div>
                   <div class="fw-600"><?= htmlspecialchars($u['nama']) ?></div>
-                  <div class="fs-12 text-muted"><?= htmlspecialchars($u['jabatan']??'') ?></div>
+                  <?php if ($u['role_sistem']==='superadmin'): ?>
+                    <div class="text-warning fs-12 d-flex align-items-center gap-1">
+                      <i class="bi bi-lightning-charge-fill"></i>Super Admin
+                    </div>
+                  <?php else: ?>
+                    <div class="fs-12 text-muted"><?= htmlspecialchars($u['jabatan']??'') ?></div>
+                  <?php endif; ?>
                 </div>
               </div>
             </td>
@@ -173,9 +240,11 @@ $jabatanSistemLabel = [
               <?php endif; ?>
             </td>
             <td>
-              <span class="badge <?= $u['role_sistem']==='superadmin'?'bg-danger':'bg-secondary' ?>">
-                <?= $u['role_sistem']==='superadmin'?'⚡ Super Admin':'Staff' ?>
-              </span>
+              <?php if ($u['role_sistem'] === 'superadmin'): ?>
+                <span class="text-muted fs-12">—</span>
+              <?php else: ?>
+                <span class="badge bg-secondary">Staff</span>
+              <?php endif; ?>
             </td>
             <td>
               <span class="badge <?= $u['status']==='aktif'?'bg-success':'bg-secondary' ?>">
@@ -184,22 +253,23 @@ $jabatanSistemLabel = [
             </td>
             <td>
               <div class="d-flex gap-1">
-                <!-- Tombol Ubah Role -->
-                <button class="btn btn-sm btn-outline-primary" title="Ubah Role"
-                        data-bs-toggle="modal" data-bs-target="#modalUbahRole"
+                <button class="btn btn-sm btn-outline-primary edit-user-btn" title="Edit SDM"
+                        data-bs-toggle="modal" data-bs-target="#modalEditUser"
                         data-id="<?= $u['id'] ?>"
                         data-nama="<?= htmlspecialchars($u['nama']) ?>"
+                        data-email="<?= htmlspecialchars($u['email']) ?>"
+                        data-divisi="<?= htmlspecialchars($u['divisi']??'') ?>"
+                        data-jabatan="<?= htmlspecialchars($u['jabatan']??'') ?>"
                         data-role="<?= $u['role_sistem'] ?>"
-                        data-jabatan="<?= $u['jabatan_sistem']??'staff' ?>">
-                  <i class="bi bi-shield-lock"></i>
+                        data-jabatan-sistem="<?= $u['jabatan_sistem']??'staff' ?>">
+                  <i class="bi bi-pencil-square"></i>
                 </button>
-                <!-- Toggle Aktif -->
                 <?php if ($u['id'] != 1): ?>
-                <a href="?toggle=<?= $u['id'] ?>"
-                   class="btn btn-sm btn-outline-<?= $u['status']==='aktif'?'warning':'success' ?>"
-                   data-confirm="<?= $u['status']==='aktif'?'Nonaktifkan':'Aktifkan' ?> SDM ini?"
-                   title="<?= $u['status']==='aktif'?'Nonaktifkan':'Aktifkan' ?>">
-                  <i class="bi bi-<?= $u['status']==='aktif'?'pause':'play' ?>-circle"></i>
+                <a href="?delete=<?= $u['id'] ?>"
+                   class="btn btn-sm btn-outline-danger"
+                   data-confirm="Hapus SDM ini?"
+                   title="Hapus SDM">
+                  <i class="bi bi-trash"></i>
                 </a>
                 <?php endif; ?>
               </div>
@@ -212,20 +282,42 @@ $jabatanSistemLabel = [
   </div>
 </div>
 
-<!-- ── Modal Ubah Role ── -->
-<div class="modal fade" id="modalUbahRole" tabindex="-1">
+<!-- ── Modal Edit SDM ── -->
+<div class="modal fade" id="modalEditUser" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-700"><i class="bi bi-shield-lock me-2"></i>Ubah Role & Jabatan</h5>
+        <h5 class="modal-title fw-700"><i class="bi bi-pencil-square me-2"></i>Edit SDM</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
-        <input type="hidden" name="target_id" id="roleTargetId">
+        <input type="hidden" name="target_id" id="editTargetId">
         <div class="modal-body">
           <div class="alert alert-info fs-13 mb-3">
             <i class="bi bi-info-circle me-1"></i>
-            Mengubah role untuk: <strong id="roleTargetNama"></strong>
+            Mengubah data untuk: <strong id="editTargetNama"></strong>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Nama Lengkap</label>
+              <input type="text" name="nama" id="editNama" class="form-control" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" id="editEmail" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Divisi</label>
+              <select name="divisi" id="editDivisi" class="form-select">
+                <option value="">Pilih Divisi</option>
+                <?php foreach ($divisiOpts as $d): ?><option value="<?= $d ?>"><?= $d ?></option><?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Jabatan</label>
+              <input type="text" name="jabatan" id="editJabatan" class="form-control" placeholder="cth: Guru Kelas 3">
+            </div>
           </div>
 
           <div class="mb-4">
@@ -236,7 +328,7 @@ $jabatanSistemLabel = [
                 <label class="btn btn-outline-secondary w-100 text-start" for="roleStaff">
                   <i class="bi bi-person me-2"></i>
                   <strong>Staff</strong>
-                  <div class="fs-12 mt-1 fw-400">Akses standar — kelola acara yang diikuti</div>
+                  <div class="fs-12 mt-1 fw-400">Akses standar</div>
                 </label>
               </div>
               <div class="col-6">
@@ -244,7 +336,7 @@ $jabatanSistemLabel = [
                 <label class="btn btn-outline-danger w-100 text-start" for="roleSuperadmin">
                   <i class="bi bi-shield-fill me-2"></i>
                   <strong>Super Admin</strong>
-                  <div class="fs-12 mt-1 fw-400">Akses penuh — kelola seluruh sistem</div>
+                  <div class="fs-12 mt-1 fw-400">Akses penuh seluruh sistem</div>
                 </label>
               </div>
             </div>
@@ -252,22 +344,26 @@ $jabatanSistemLabel = [
 
           <div class="mb-3">
             <label class="form-label fw-700">Jabatan dalam Hierarki Sekolah</label>
-            <div class="form-text mb-2">Menentukan siapa yang bisa menjadi approver untuk tipe tertentu</div>
+            <div class="form-text mb-2">Menentukan approver untuk tipe acara tertentu</div>
             <select name="jabatan_sistem" id="jabatanSistemSelect" class="form-select">
-              <option value="staff">Staff Biasa (tidak ada jabatan khusus)</option>
+              <option value="staff">Staff Biasa</option>
               <optgroup label="Manager Level">
-                <option value="manager_tk">Manager TK — bisa approve acara TK</option>
-                <option value="manager_sd">Manager SD — bisa approve acara SD</option>
-                <option value="manager_smp">Manager SMP — bisa approve acara SMP</option>
+                <option value="manager_tk">Manager TK</option>
+                <option value="manager_sd">Manager SD</option>
+                <option value="manager_smp">Manager SMP</option>
               </optgroup>
               <optgroup label="Jabatan Administratif">
-                <option value="bendahara_tertinggi">💰 Bendahara Tertinggi — approve RAB & anggaran</option>
-                <option value="kepala_sekolah">🏫 Kepala Sekolah — approval tertinggi</option>
+                <option value="bendahara_tertinggi">Bendahara Tertinggi</option>
+                <option value="kepala_sekolah">Kepala Sekolah</option>
               </optgroup>
             </select>
           </div>
 
-          <!-- Info jabatan yang dipilih -->
+          <div class="mb-3 form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="resetPassword" name="reset_password">
+            <label class="form-check-label" for="resetPassword">Reset password ke nilai awal <strong>password</strong></label>
+          </div>
+
           <div id="jabatanInfo" class="alert alert-warning fs-12 d-none">
             <i class="bi bi-info-circle me-1"></i>
             <span id="jabatanInfoText"></span>
@@ -275,8 +371,44 @@ $jabatanSistemLabel = [
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" name="ubah_role" class="btn btn-primary">
+          <button type="submit" name="edit_user" class="btn btn-primary">
             <i class="bi bi-save me-1"></i> Simpan Perubahan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal Bulk Edit SDM ── -->
+<div class="modal fade" id="modalBulkEdit" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-700"><i class="bi bi-people me-2"></i>Bulk Edit SDM</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="bulk_action" value="1">
+        <input type="hidden" name="bulk_action_type" value="divisi">
+        <div id="bulkUserIdsContainer"></div>
+        <div class="modal-body">
+          <div class="alert alert-info fs-13 mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Ubah divisi untuk SDM terpilih.
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Divisi Baru</label>
+            <select name="bulk_divisi" class="form-select">
+              <?php foreach ($divisiOpts as $d): ?><option value="<?= $d ?>"><?= $d ?></option><?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-text">Terpilih: <span id="bulkSelectedCount">0</span> SDM.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save me-1"></i> Terapkan ke Terpilih
           </button>
         </div>
       </form>
@@ -354,22 +486,6 @@ $jabatanSistemLabel = [
 </div>
 
 <script>
-// Isi modal ubah role dengan data SDM yang dipilih
-document.getElementById('modalUbahRole').addEventListener('show.bs.modal', function(e) {
-  const btn = e.relatedTarget;
-  document.getElementById('roleTargetId').value   = btn.dataset.id;
-  document.getElementById('roleTargetNama').textContent = btn.dataset.nama;
-
-  // Set radio role_sistem
-  const roleVal = btn.dataset.role;
-  const radioId = roleVal === 'superadmin' ? 'roleSuperadmin' : 'roleStaff';
-  document.getElementById(radioId).checked = true;
-
-  // Set jabatan_sistem
-  document.getElementById('jabatanSistemSelect').value = btn.dataset.jabatan || 'staff';
-  updateJabatanInfo();
-});
-
 // Info jabatan
 const jabatanInfo = {
   'bendahara_tertinggi': 'Orang ini akan muncul sebagai pilihan Approver Bendahara saat PIC membuat approval RAB.',
@@ -392,6 +508,79 @@ function updateJabatanInfo() {
 }
 
 document.getElementById('jabatanSistemSelect').addEventListener('change', updateJabatanInfo);
+
+// Modal edit user
+const editUserModal = document.getElementById('modalEditUser');
+document.querySelectorAll('.edit-user-btn').forEach(btn => {
+  btn.addEventListener('click', function () {
+    document.getElementById('editTargetId').value = this.dataset.id;
+    document.getElementById('editTargetNama').textContent = this.dataset.nama;
+    document.getElementById('editNama').value = this.dataset.nama;
+    document.getElementById('editEmail').value = this.dataset.email;
+    document.getElementById('editDivisi').value = this.dataset.divisi;
+    document.getElementById('editJabatan').value = this.dataset.jabatan;
+    document.getElementById(this.dataset.role === 'superadmin' ? 'roleSuperadmin' : 'roleStaff').checked = true;
+    document.getElementById('jabatanSistemSelect').value = this.dataset.jabatanSistem || 'staff';
+    document.getElementById('resetPassword').checked = false;
+    updateJabatanInfo();
+  });
+});
+
+// Bulk selection
+const selectAllCheckbox = document.getElementById('selectAllUsers');
+const bulkEditBtn = document.getElementById('bulkEditBtn');
+const bulkDeactivateBtn = document.getElementById('bulkDeactivateBtn');
+const bulkSelectedCount = document.getElementById('bulkSelectedCount');
+const bulkUserIdsContainer = document.getElementById('bulkUserIdsContainer');
+const bulkActionModal = new bootstrap.Modal(document.getElementById('modalBulkEdit'));
+
+function getSelectedUserIds() {
+  return Array.from(document.querySelectorAll('.user-select-checkbox:checked')).map(chk => chk.value);
+}
+
+function updateBulkButtons() {
+  const selected = getSelectedUserIds();
+  const enabled = selected.length > 0;
+  bulkEditBtn.disabled = !enabled;
+  bulkDeactivateBtn.disabled = !enabled;
+  bulkSelectedCount.textContent = selected.length;
+  document.getElementById('bulkActionsBar').classList.toggle('d-none', !enabled);
+}
+
+document.querySelectorAll('.user-select-checkbox').forEach(chk => {
+  chk.addEventListener('change', updateBulkButtons);
+});
+
+selectAllCheckbox?.addEventListener('change', function () {
+  document.querySelectorAll('.user-select-checkbox').forEach(chk => {
+    chk.checked = this.checked;
+  });
+  updateBulkButtons();
+});
+
+updateBulkButtons();
+
+bulkEditBtn?.addEventListener('click', function () {
+  const ids = getSelectedUserIds();
+  bulkUserIdsContainer.innerHTML = ids.map(id => `<input type="hidden" name="bulk_user_ids[]" value="${id}">`).join('');
+  updateBulkButtons();
+  bulkActionModal.show();
+});
+
+bulkDeactivateBtn?.addEventListener('click', function () {
+  const ids = getSelectedUserIds();
+  if (!ids.length) return;
+  if (!confirm('Hapus semua SDM terpilih?')) return;
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.style.display = 'none';
+  form.innerHTML = `<input type="hidden" name="bulk_action" value="1">
+    <input type="hidden" name="bulk_action_type" value="delete">` +
+    ids.map(id => `<input type="hidden" name="bulk_user_ids[]" value="${id}">`).join('');
+  document.body.appendChild(form);
+  form.submit();
+});
+
 </script>
 
 <?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>

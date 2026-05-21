@@ -209,6 +209,19 @@ $statusLabel = ['pending'=>'Menunggu','approved'=>'Disetujui','rejected'=>'Ditol
                    class="btn btn-outline-secondary btn-sm">
                   <i class="bi bi-folder2-open me-1"></i> Lihat Dokumen
                 </a>
+                <?php
+                  $docQ = $pdo->prepare("SELECT id, nama_file FROM event_files WHERE event_id=? ORDER BY created_at DESC LIMIT 1");
+                  $docQ->execute([$ap['event_id']]);
+                  $latestDoc = $docQ->fetch();
+                ?>
+                <?php if ($latestDoc): ?>
+                  <a href="<?= BASE_URL ?>/modules/files/preview.php?id=<?= $latestDoc['id'] ?>" class="btn btn-outline-info btn-sm ms-1" title="Preview dokumen terbaru">
+                    <i class="bi bi-eye me-1"></i> Preview Dokumen
+                  </a>
+                  <a href="<?= BASE_URL ?>/modules/files/download.php?id=<?= $latestDoc['id'] ?>" class="btn btn-outline-primary btn-sm ms-1" title="Download dokumen terbaru">
+                    <i class="bi bi-download me-1"></i> Download Dokumen
+                  </a>
+                <?php endif; ?>
                 <a href="<?= BASE_URL ?>/modules/events/detail.php?id=<?= $ap['event_id'] ?>"
                    class="btn btn-outline-primary btn-sm ms-1">
                   <i class="bi bi-eye me-1"></i> Detail Acara

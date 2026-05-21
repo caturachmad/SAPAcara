@@ -69,6 +69,12 @@ if (isset($_GET['download_template'])) {
 
     // Sheet Petunjuk
     $guide     = $spreadsheet->createSheet()->setTitle('Petunjuk');
+    
+    // ── Get divisions for template ──
+    $divStmt = $pdo->prepare("SELECT nama FROM divisions ORDER BY urutan ASC");
+    $divStmt->execute();
+    $divList = implode(' / ', array_column($divStmt->fetchAll(), 'nama')) ?: 'TK / SD / SMP / Umum / IT';
+    
     $guideRows = [
         ['PETUNJUK IMPORT DATA SDM — SAPAcara', ''],
         ['', ''],
@@ -76,7 +82,7 @@ if (isset($_GET['download_template'])) {
         ['nama *',        'Nama lengkap SDM (wajib)'],
         ['email *',       'Email unik untuk login (wajib)'],
         ['no_wa',         'Nomor WhatsApp, format: 08xxxxxxxxxx (opsional)'],
-        ['divisi *',      'Pilih: TK / SD / SMP / Umum / IT (wajib)'],
+        ['divisi *',      'Tulis divisi yang ada atau baru: ' . $divList . ' (wajib)'],
         ['jabatan',       'Jabatan SDM (opsional)'],
         ['role_sistem',   'staff (default) atau superadmin'],
         ['password',      'Password awal login, default "password" jika kosong'],
@@ -84,7 +90,7 @@ if (isset($_GET['download_template'])) {
         ['Catatan:', ''],
         ['', '• Baris pertama (header) jangan diubah atau dihapus'],
         ['', '• Kolom bertanda * wajib diisi'],
-        ['', '• Email duplikat otomatis dilewati'],
+        ['', '• Email duplikat akan diupdate jika data berbeda, atau dilewati jika tidak ada perubahan'],
         ['', '• Password bisa diganti setelah login pertama'],
         ['', '• Maks upload 5MB, format .xlsx / .xls / .csv'],
     ];
@@ -132,19 +138,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file_excel']) && $_F
             $rows        = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
             array_shift($rows); // buang baris header
 
-            $divisiValid = ['TK','SD','SMP','Umum','IT'];
+            // ── Fetch valid divisions from DB ──
+            $divStmt = $pdo->prepare("SELECT nama FROM divisions ORDER BY urutan ASC");
+            $divStmt->execute();
+            $divisiValid = array_column($divStmt->fetchAll(), 'nama');
 
             foreach ($rows as $i => $row) {
                 // Skip baris kosong
                 if (empty(array_filter($row, fn($v) => $v !== null && $v !== ''))) continue;
 
-                $nama    = trim((string)($row[0] ?? ''));
-                $email   = strtolower(trim((string)($row[1] ?? '')));
-                $no_wa   = trim((string)($row[2] ?? ''));
-                $divisi  = trim((string)($row[3] ?? ''));
-                $jabatan = trim((string)($row[4] ?? ''));
-                $role    = strtolower(trim((string)($row[5] ?? 'staff')));
-                $pass    = trim((string)($row[6] ?? '')) ?: 'password';
+                $nama     = trim((string)($row[0] ?? ''));
+                $email    = strtolower(trim((string)($row[1] ?? '')));
+                $no_wa    = trim((string)($row[2] ?? ''));
+                $divisi   = trim((string)($row[3] ?? ''));
+                $jabatan  = trim((string)($row[4] ?? ''));
+                $role     = strtolower(trim((string)($row[5] ?? 'staff')));
+                $passRaw  = trim((string)($row[6] ?? ''));
+                $pass     = $passRaw === '' ? null : $passRaw;
 
                 if (!in_array($role, ['staff','superadmin'])) $role = 'staff';
 
@@ -152,18 +162,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file_excel']) && $_F
                 if (!$nama)  $rowErrors[] = 'Nama kosong';
                 if (!$email) $rowErrors[] = 'Email kosong';
                 elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $rowErrors[] = 'Format email salah';
-                if (!in_array($divisi, $divisiValid)) {
-                    $rowErrors[] = "Divisi '$divisi' tidak valid";
-                }
+                if (!$divisi) $rowErrors[] = 'Divisi kosong';
 
+                $existingUser = null;
                 $exists = false;
                 if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $cek = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+                    $cek = $pdo->prepare("SELECT id,nama,no_wa,divisi,jabatan,role_sistem FROM users WHERE email = ?");
                     $cek->execute([$email]);
-                    $exists = (bool)$cek->fetchColumn();
+                    $existingUser = $cek->fetch(PDO::FETCH_ASSOC);
+                    $exists = (bool)$existingUser;
                 }
 
-                $preview[] = compact('nama','email','no_wa','divisi','jabatan','role','pass','rowErrors','exists');
+                $needsUpdate = false;
+                if ($exists && empty($rowErrors)) {
+                    $compareFields = [
+                        'nama' => $nama,
+                        'no_wa' => $no_wa,
+                        'divisi' => $divisi,
+                        'jabatan' => $jabatan,
+                        'role_sistem' => $role,
+                    ];
+                    foreach ($compareFields as $field => $value) {
+                        if (($existingUser[$field] ?? '') !== $value) {
+                            $needsUpdate = true;
+                            break;
+                        }
+                    }
+                    if (!$needsUpdate && $pass !== null) {
+                        $needsUpdate = true;
+                    }
+                }
+
+                $isNewDivision = $divisi !== '' && !in_array($divisi, $divisiValid);
+                $preview[] = compact('nama','email','no_wa','divisi','jabatan','role','pass','rowErrors','exists','needsUpdate','isNewDivision');
             }
 
             if (empty($preview)) {
@@ -180,22 +211,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_import'])) {
     $rows = json_decode($_POST['import_data'], true) ?? [];
     $ok = 0; $skip = 0;
     foreach ($rows as $r) {
-        if (!empty($r['rowErrors']) || $r['exists']) { $skip++; continue; }
+        if (!empty($r['rowErrors'])) { $skip++; continue; }
+
         try {
-            $pdo->prepare("INSERT INTO users (nama,email,password,no_wa,divisi,jabatan,role_sistem) VALUES (?,?,?,?,?,?,?)")
-                ->execute([$r['nama'], $r['email'], password_hash($r['pass'], PASSWORD_DEFAULT),
-                           $r['no_wa'], $r['divisi'], $r['jabatan'], $r['role']]);
-            $ok++;
-        } catch (\Exception $e) { $skip++; }
+            if (!$r['exists']) {
+                $divisi = trim($r['divisi']);
+                if ($divisi !== '') {
+                    $checkDiv = $pdo->prepare("SELECT id FROM divisions WHERE nama = ?");
+                    $checkDiv->execute([$divisi]);
+                    if (!$checkDiv->fetchColumn()) {
+                        $nextOrder = $pdo->query("SELECT COALESCE(MAX(urutan), 0) + 1 FROM divisions")->fetchColumn();
+                        $pdo->prepare("INSERT INTO divisions (nama, urutan) VALUES (?, ?)")
+                            ->execute([$divisi, $nextOrder]);
+                    }
+                }
+
+                $pdo->prepare("INSERT INTO users (nama,email,password,no_wa,divisi,jabatan,role_sistem) VALUES (?,?,?,?,?,?,?)")
+                    ->execute([
+                        $r['nama'],
+                        $r['email'],
+                        password_hash($r['pass'] ?? 'password', PASSWORD_DEFAULT),
+                        $r['no_wa'],
+                        $r['divisi'],
+                        $r['jabatan'],
+                        $r['role'],
+                    ]);
+                $ok++;
+            } elseif (!empty($r['needsUpdate'])) {
+                $divisi = trim($r['divisi']);
+                if ($divisi !== '') {
+                    $checkDiv = $pdo->prepare("SELECT id FROM divisions WHERE nama = ?");
+                    $checkDiv->execute([$divisi]);
+                    if (!$checkDiv->fetchColumn()) {
+                        $nextOrder = $pdo->query("SELECT COALESCE(MAX(urutan), 0) + 1 FROM divisions")->fetchColumn();
+                        $pdo->prepare("INSERT INTO divisions (nama, urutan) VALUES (?, ?)")
+                            ->execute([$divisi, $nextOrder]);
+                    }
+                }
+
+                $params = [$r['nama'], $r['no_wa'], $r['divisi'], $r['jabatan'], $r['role']];
+                $sql = "UPDATE users SET nama = ?, no_wa = ?, divisi = ?, jabatan = ?, role_sistem = ?";
+                if (!empty($r['pass'])) {
+                    $sql .= ", password = ?";
+                    $params[] = password_hash($r['pass'], PASSWORD_DEFAULT);
+                }
+                $sql .= " WHERE email = ?";
+                $params[] = $r['email'];
+                $pdo->prepare($sql)->execute($params);
+                $ok++;
+            } else {
+                $skip++;
+            }
+        } catch (\Exception $e) {
+            $skip++;
+        }
     }
     $pdo->prepare("INSERT INTO sdm_import_log (filename,total_rows,success_rows,skip_rows,imported_by) VALUES (?,?,?,?,?)")
         ->execute(['Import Excel', count($rows), $ok, $skip, $_SESSION['user_id']]);
-    setFlash("Import selesai! $ok SDM berhasil ditambahkan, $skip dilewati.", $ok > 0 ? 'success' : 'warning');
+    setFlash("Import selesai! $ok SDM berhasil diproses, $skip baris dilewati.", $ok > 0 ? 'success' : 'warning');
     header('Location: ' . BASE_URL . '/modules/users/');
     exit;
 }
 
-$validCount = count(array_filter($preview, fn($r) => empty($r['rowErrors']) && !$r['exists']));
+$validCount = count(array_filter($preview, fn($r) => empty($r['rowErrors']) && (!$r['exists'] || !empty($r['needsUpdate']))));
 $skipCount  = count($preview) - $validCount;
 ?>
 
@@ -254,7 +332,12 @@ $skipCount  = count($preview) - $validCount;
         <tr><td class="text-center fw-700">A</td><td><code>nama</code></td><td><span class="badge bg-danger">Wajib</span></td><td>Nama lengkap SDM</td></tr>
         <tr><td class="text-center fw-700">B</td><td><code>email</code></td><td><span class="badge bg-danger">Wajib</span></td><td>Email valid dan unik</td></tr>
         <tr><td class="text-center fw-700">C</td><td><code>no_wa</code></td><td><span class="badge bg-secondary">Opsional</span></td><td>Format: 08xxxxxxxxxx</td></tr>
-        <tr><td class="text-center fw-700">D</td><td><code>divisi</code></td><td><span class="badge bg-danger">Wajib</span></td><td><code>TK</code> / <code>SD</code> / <code>SMP</code> / <code>Umum</code> / <code>IT</code></td></tr>
+        <tr><td class="text-center fw-700">D</td><td><code>divisi</code></td><td><span class="badge bg-danger">Wajib</span></td><td><?php
+          $divStmt2 = $pdo->prepare("SELECT GROUP_CONCAT(nama SEPARATOR ' / ') as divs FROM divisions ORDER BY urutan");
+          $divStmt2->execute();
+          $divText = $divStmt2->fetchColumn() ?: 'TK / SD / SMP / Umum / IT';
+          echo htmlspecialchars($divText);
+        ?></td></tr>
         <tr><td class="text-center fw-700">E</td><td><code>jabatan</code></td><td><span class="badge bg-secondary">Opsional</span></td><td>Jabatan SDM</td></tr>
         <tr><td class="text-center fw-700">F</td><td><code>role_sistem</code></td><td><span class="badge bg-secondary">Opsional</span></td><td><code>staff</code> (default) / <code>superadmin</code></td></tr>
         <tr><td class="text-center fw-700">G</td><td><code>password</code></td><td><span class="badge bg-secondary">Opsional</span></td><td>Default: <code>password</code></td></tr>
@@ -299,7 +382,7 @@ $skipCount  = count($preview) - $validCount;
   <div class="col-6 col-md-3">
     <div class="stat-card" style="background:linear-gradient(135deg,#d97706,#f59e0b)">
       <div class="stat-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
-      <div><div class="stat-num"><?= count(array_filter($preview, fn($r) => $r['exists'])) ?></div><div class="stat-label">Email Duplikat</div></div>
+      <div><div class="stat-num"><?= count(array_filter($preview, fn($r) => $r['exists'])) ?></div><div class="stat-label">Email Terdaftar</div></div>
     </div>
   </div>
   <div class="col-6 col-md-3">
@@ -316,7 +399,8 @@ $skipCount  = count($preview) - $validCount;
     <span><i class="bi bi-table"></i> Preview Data (<?= count($preview) ?> baris)</span>
     <div class="d-flex gap-2 flex-wrap">
       <span class="badge bg-success">✅ Valid = akan diimport</span>
-      <span class="badge bg-warning text-dark">⚠️ Duplikat = dilewati</span>
+      <span class="badge bg-info text-dark">🔁 Update = email sudah ada, data diperbarui</span>
+      <span class="badge bg-warning text-dark">⚠️ Duplikat = tidak ada perubahan</span>
       <span class="badge bg-danger">❌ Error = dilewati</span>
     </div>
   </div>
@@ -329,7 +413,7 @@ $skipCount  = count($preview) - $validCount;
         <tbody>
         <?php foreach ($preview as $i => $r):
           $isErr  = !empty($r['rowErrors']);
-          $rowCls = $isErr ? 'table-danger' : ($r['exists'] ? 'table-warning' : '');
+          $rowCls = $isErr ? 'table-danger' : ($r['exists'] ? ($r['needsUpdate'] ? 'table-info' : 'table-warning') : '');
         ?>
           <tr class="<?= $rowCls ?>">
             <td class="text-muted fw-500"><?= $i+2 ?></td>
@@ -342,9 +426,12 @@ $skipCount  = count($preview) - $validCount;
               <?php if ($isErr): ?>
                 <span class="badge bg-danger">❌ Error</span>
                 <div class="fs-12 text-danger mt-1"><?= htmlspecialchars(implode(', ', $r['rowErrors'])) ?></div>
+              <?php elseif ($r['exists'] && $r['needsUpdate']): ?>
+                <span class="badge bg-info text-dark">🔁 Update</span>
+                <div class="fs-12" style="color:#0f766e">Email sudah ada, data akan diperbarui</div>
               <?php elseif ($r['exists']): ?>
                 <span class="badge bg-warning text-dark">⚠️ Duplikat</span>
-                <div class="fs-12" style="color:#92400e">Email sudah terdaftar</div>
+                <div class="fs-12" style="color:#92400e">Email sudah terdaftar, tidak ada perubahan</div>
               <?php else: ?>
                 <span class="badge bg-success">✅ Valid</span>
               <?php endif; ?>

@@ -1,6 +1,6 @@
 # Active context
 
-**Current focus**: Implementasi alur pembuatan acara baru termasuk penentuan kepanitiaan inti, routing approval berbasis divisi, pembatasan upload dokumen kritis hingga approval manager, dan pengiriman email/undangan otomatis untuk bendahara dan panitia.
+**Current focus**: Implementasi alur pembuatan acara baru termasuk penugasan panitia dengan bagian/divisi dinamis (Bendahara, Sekretaris, Logistik, Dokumentasi, Konsumsi, Tim Medis, Tim Acara, dll), routing approval berbasis divisi, pembatasan upload dokumen kritis hingga approval manager, dan pengiriman email/undangan otomatis untuk bendahara dan panitia.
 
 **In progress**:
 

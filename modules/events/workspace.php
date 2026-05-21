@@ -19,7 +19,7 @@ $stmtR->execute([$id, $_SESSION['user_id']]); $myRole = $stmtR->fetch();
 $isSA         = isSuperAdmin();
 $isPic        = $isSA || ($myRole && $myRole['peran_acara']==='pic');
 $isEventAdmin = $isSA || ($myRole && ($myRole['is_event_admin']||$myRole['peran_acara']==='pic'));
-$isInti       = $myRole && in_array($myRole['peran_acara'],['pic','panitia_inti']);
+$isInti       = $myRole && $myRole['peran_acara'] !== 'pic';
 $isAnggota    = (bool)$myRole || $isSA;
 
 // Akses check
@@ -93,6 +93,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_wa']) && $isPic) {
     header("Location: ?id=$id"); exit;
 }
 
+// Handle update documentation link
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_doc']) && $isPic) {
+    $pdo->prepare("UPDATE events SET link_dokumentasi=? WHERE id=?")->execute([trim($_POST['link_dokumentasi']),$id]);
+    setFlash('Link dokumentasi disimpan.','success');
+    header("Location: ?id=$id"); exit;
+}
+
 $statusLabel = ['draft'=>'Draft','pengajuan'=>'Diajukan','disetujui_manager'=>'Disetujui Manager',
   'proposal_dibuat'=>'Proposal Dibuat','rab_diajukan'=>'RAB Diajukan','perijinan'=>'Perijinan',
   'disetujui'=>'Disetujui','berlangsung'=>'Berlangsung','selesai'=>'Selesai','ditolak'=>'Ditolak'];
@@ -113,9 +120,10 @@ $fileTypeLabel = ['rab'=>'RAB','rundown'=>'Rundown','proposal'=>'Proposal','peri
   'jobdesk'=>'Jobdesk','undangan'=>'Undangan','lainnya'=>'Lainnya'];
 $fileTypeIcon  = ['rab'=>'cash-stack','rundown'=>'list-task','proposal'=>'file-text','perijinan'=>'shield-check',
   'jobdesk'=>'person-workspace','undangan'=>'envelope','lainnya'=>'file-earmark'];
-$visLabel = ['all'=>'Semua Panitia','inti'=>'Panitia Inti & PIC','pic_only'=>'PIC Saja'];
+$visLabel = ['all'=>'Semua Panitia','inti'=>'Panitia & PIC','pic_only'=>'PIC Saja'];
 $visColor = ['all'=>'success','inti'=>'warning','pic_only'=>'danger'];
-$peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'Support'];
+$panitiaBagianOptions = ['Bendahara','Sekretaris','Logistik','Dokumentasi','Konsumsi','Tim Medis','Tim Acara','Korlap','SC Kegiatan','Tilawah','MC','Operator','Dekor','Kehumasan','Perlengkapan','Keamanan','Registrasi','Transportasi'];
+$peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'Panitia Biasa'];
 $konfirmColor = ['pending'=>'warning','bersedia'=>'success','tidak_bisa'=>'danger'];
 $konfirmLabel = ['pending'=>'Menunggu','bersedia'=>'Bersedia','tidak_bisa'=>'Tidak Bisa'];
 $approvalLabel = ['pending'=>'Menunggu','approved'=>'Disetujui','rejected'=>'Ditolak'];
@@ -149,7 +157,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
             <span class="badge bg-light text-dark"><?= $ev['level'] ?></span>
             <span class="badge bg-warning text-dark">
-              <?= $myRole ? ($myRole['peran_acara']==='pic' ? 'PIC' : ($myRole['is_event_admin'] ? 'Event Admin' : ucfirst(str_replace('_',' ',$myRole['peran_acara'])))) : 'Viewer' ?>
+              <?= $myRole ? ($myRole['peran_acara']==='pic' ? 'PIC' : ($myRole['is_event_admin'] ? 'Panitia Inti' : 'Panitia Biasa')) : 'Viewer' ?>
             </span>
             <?php if ($myRole && $myRole['bagian']): ?>
               <span class="badge" style="background:rgba(255,255,255,.2);color:#fff"><?= htmlspecialchars($myRole['bagian']) ?></span>
@@ -177,8 +185,8 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <div class="dropdown">
             <button class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown">Update Status</button>
             <ul class="dropdown-menu">
-              <?php if ($ev['status']==='disetujui'): ?><li><a class="dropdown-item" href="#" onclick="submitStatus('berlangsung')">✏️ Tandai Berlangsung</a></li><?php endif; ?>
-              <?php if ($ev['status']==='berlangsung'): ?><li><a class="dropdown-item text-success" href="#" onclick="submitStatus('selesai')" data-confirm="Tandai acara ini selesai?">🏁 Tandai Selesai</a></li><?php endif; ?>
+              <?php if ($ev['status']==='disetujui'): ?><li><button type="button" class="dropdown-item" onclick="submitStatus('berlangsung')">✏️ Tandai Berlangsung</button></li><?php endif; ?>
+              <?php if ($ev['status']==='berlangsung'): ?><li><button type="button" class="dropdown-item text-success" onclick="submitStatus('selesai')" data-confirm="Tandai acara ini selesai?">🏁 Tandai Selesai</button></li><?php endif; ?>
             </ul>
           </div>
           <form method="POST" id="statusForm" class="d-none">
@@ -190,95 +198,6 @@ require_once __DIR__ . '/../../includes/layout/header.php';
     </div>
   </div>
 </div>
-
-<div class="card mb-4 border-start border-4 border-primary">
-  <div class="card-body py-3">
-    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
-      <div>
-        <div class="badge bg-primary text-white mb-2">Ringkasan Alur</div>
-        <div class="fw-700 fs-14 mb-1"><?= htmlspecialchars($statusLabel[$ev['status']] ?? 'Status tidak diketahui') ?></div>
-        <div class="fs-13 text-muted mb-2"><?= htmlspecialchars($workflowHint) ?></div>
-        <?php if (!$isEventAdmin && !$isPic): ?>
-          <div class="alert alert-warning py-2 px-3 mb-0 fs-12">
-            Kamu saat ini hanya dapat melihat. Untuk upload dokumen atau menambahkan panitia, hubungi PIC atau event admin di acara ini.
-          </div>
-        <?php endif; ?>
-      </div>
-      <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-primary btn-sm" data-bs-toggle="tab" href="#overview">Overview</a>
-        <a class="btn btn-outline-primary btn-sm" data-bs-toggle="tab" href="#dokumen">Dokumen</a>
-        <a class="btn btn-outline-primary btn-sm" data-bs-toggle="tab" href="#tim">Tim</a>
-        <a class="btn btn-outline-primary btn-sm" data-bs-toggle="tab" href="#checklist">Checklist</a>
-        <?php if ($isPic): ?><a class="btn btn-outline-primary btn-sm" data-bs-toggle="tab" href="#approval">Approval</a><?php endif; ?>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Approval Pipeline -->
-<?php if (!empty($approvals)): ?>
-<div class="card mb-4">
-  <div class="card-header d-flex align-items-center justify-content-between">
-    <div><i class="bi bi-flow-chart"></i> Alur Approval</div>
-    <div class="approval-action-summary">
-      <span><i class="bi bi-clock-history"></i> <?= $pendingCount ?> menunggu</span>
-      <span><i class="bi bi-check-circle"></i> <?= count(array_filter($approvals, fn($ap) => $ap['status'] === 'approved')) ?> disetujui</span>
-      <span><i class="bi bi-x-circle"></i> <?= count(array_filter($approvals, fn($ap) => $ap['status'] === 'rejected')) ?> ditolak</span>
-    </div>
-  </div>
-  <div class="card-body py-3">
-    <div class="approval-timeline">
-      <?php foreach ($approvals as $ap):
-        $cardClass = $ap['status'] === 'approved' ? 'approved' : ($ap['status'] === 'rejected' ? 'rejected' : 'pending');
-        $isActive = $ap['status'] === 'pending' && $ap['urutan'] === $currentApprovalUrutan;
-        $tooltip = trim(($ap['catatan'] ?? '') ?: 'Tidak ada catatan');
-      ?>
-      <button type="button" class="approval-step-card <?= $cardClass ?><?= $isActive ? ' active' : '' ?>" data-step="<?= (int)$ap['urutan'] ?>"
-        data-bs-toggle="tooltip" data-bs-placement="top" title="<?= htmlspecialchars($tooltip, ENT_QUOTES) ?>">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <div class="fw-700 fs-13"><?= htmlspecialchars($ap['nama_approver'] ?? 'Belum ditetapkan') ?></div>
-          <span class="badge bg-<?= $approvalColor[$ap['status']] ?? 'secondary' ?> fs-12"><?= $approvalLabel[$ap['status']] ?? ucfirst($ap['status']) ?></span>
-        </div>
-        <div class="fs-12 text-muted mb-2"><?= htmlspecialchars($tipeApprLabel[$ap['tipe_approver']] ?? $ap['tipe_approver']) ?></div>
-        <div class="d-flex align-items-center justify-content-between">
-          <span class="approval-meta">Urutan <?= (int)$ap['urutan'] ?></span>
-          <?php if ($isActive): ?><span class="badge bg-primary fs-11">Langkah sekarang</span><?php endif; ?>
-        </div>
-      </button>
-      <?php endforeach; ?>
-    </div>
-  </div>
-</div>
-<?php endif; ?>
-
-<!-- Progress Step (PIC/Inti only) -->
-<?php if ($isPic || $isInti): ?>
-<div class="card mb-4">
-  <div class="card-body py-3">
-    <?php
-    $steps = [
-      ['draft','bi-pencil','Draft'],
-      ['pengajuan','bi-send','Diajukan'],
-      ['disetujui_manager','bi-person-check','Manager'],
-      ['proposal_dibuat','bi-file-text','Proposal'],
-      ['rab_diajukan','bi-cash','RAB'],
-      ['disetujui','bi-check-circle','Disetujui'],
-      ['berlangsung','bi-play-circle','Berlangsung'],
-      ['selesai','bi-flag','Selesai'],
-    ];
-    $curIdx = array_search($ev['status'], array_column($steps,0));
-    ?>
-    <div class="step-flow">
-      <?php foreach ($steps as $si => [$sk,$sic,$sl]): ?>
-      <div class="step-item <?= $si<$curIdx?'done':($si===$curIdx?'active':'') ?>">
-        <div class="step-dot"><i class="bi <?= $si<$curIdx?'bi-check':$sic ?>"></i></div>
-        <div class="step-label"><?= $sl ?></div>
-      </div>
-      <?php endforeach; ?>
-    </div>
-  </div>
-</div>
-<?php endif; ?>
 
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-4" id="workspaceTabs">
@@ -347,6 +266,15 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <?php else: ?>
             <p class="fs-12 text-muted">Link dokumentasi belum diatur.</p>
           <?php endif; ?>
+          <?php if ($isPic): ?>
+            <form method="POST" class="mt-3">
+              <div class="input-group input-group-sm">
+                <input type="url" name="link_dokumentasi" class="form-control" placeholder="https://drive.google.com/..." value="<?= htmlspecialchars($ev['link_dokumentasi'] ?? '') ?>">
+                <button name="save_doc" class="btn btn-outline-secondary">Simpan</button>
+              </div>
+              <div class="form-text">Simpan link dokumentasi seperti pengaturan grup WA.</div>
+            </form>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -360,16 +288,10 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <div class="row g-2 text-center mb-3">
             <?php
             $byPeran = array_count_values(array_column($panitia,'peran_acara'));
-            $byStatus = array_count_values(array_column($panitia,'status_konfirmasi'));
             ?>
             <div class="col-4"><div class="p-2 rounded" style="background:#eff6ff"><div class="fw-800 fs-4 text-primary"><?= $byPeran['pic']??0 ?></div><div class="fs-12 text-muted">PIC</div></div></div>
-            <div class="col-4"><div class="p-2 rounded" style="background:#f0fdf4"><div class="fw-800 fs-4" style="color:#059669"><?= $byPeran['panitia_inti']??0 ?></div><div class="fs-12 text-muted">Panitia Inti</div></div></div>
-            <div class="col-4"><div class="p-2 rounded" style="background:#fafafa"><div class="fw-800 fs-4 text-muted"><?= $byPeran['panitia_support']??0 ?></div><div class="fs-12 text-muted">Support</div></div></div>
-          </div>
-          <div class="row g-2 text-center">
-            <div class="col-4"><div class="p-2 rounded" style="background:#f0fdf4"><div class="fw-700" style="color:#059669"><?= $byStatus['bersedia']??0 ?></div><div class="fs-12 text-muted">Bersedia</div></div></div>
-            <div class="col-4"><div class="p-2 rounded" style="background:#fffbeb"><div class="fw-700" style="color:#d97706"><?= $byStatus['pending']??0 ?></div><div class="fs-12 text-muted">Pending</div></div></div>
-            <div class="col-4"><div class="p-2 rounded" style="background:#fef2f2"><div class="fw-700" style="color:#dc2626"><?= $byStatus['tidak_bisa']??0 ?></div><div class="fs-12 text-muted">Tidak Bisa</div></div></div>
+            <div class="col-4"><div class="p-2 rounded" style="background:#f0fdf4"><div class="fw-800 fs-4" style="color:#059669"><?= ($byPeran['panitia_inti']??0) + ($byPeran['panitia_support']??0) ?></div><div class="fs-12 text-muted">Panitia</div></div></div>
+            <div class="col-4"><div class="p-2 rounded" style="background:#fafafa"><div class="fw-800 fs-4 text-muted"><?= count($panitia) ?></div><div class="fs-12 text-muted">Total Tim</div></div></div>
           </div>
         </div>
       </div>
@@ -391,7 +313,11 @@ require_once __DIR__ . '/../../includes/layout/header.php';
                 <div class="fw-600 fs-13 text-truncate"><?= htmlspecialchars($f['nama_file']) ?></div>
                 <div class="fs-12 text-muted"><?= $fileTypeLabel[$f['file_type']] ?> · <?= date('d M', strtotime($f['created_at'])) ?></div>
               </div>
-              <a href="<?= BASE_URL ?>/modules/files/download.php?id=<?= $f['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i></a>
+              <a href="<?= BASE_URL ?>/modules/files/preview.php?id=<?= $f['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Preview"><i class="bi bi-eye"></i></a>
+              <a href="<?= BASE_URL ?>/modules/files/download.php?id=<?= $f['id'] ?>" class="btn btn-sm btn-outline-primary ms-1" title="Download"><i class="bi bi-download"></i></a>
+              <?php if ($isEventAdmin || $isPic || (int)($f['uploaded_by'] ?? 0) === (int)$_SESSION['user_id']): ?>
+                <a href="<?= BASE_URL ?>/modules/files/edit.php?id=<?= $f['id'] ?>" class="btn btn-sm btn-outline-warning ms-1" title="Edit"><i class="bi bi-pencil"></i></a>
+              <?php endif; ?>
             </div>
           <?php endforeach; endif; ?>
         </div>
@@ -444,15 +370,30 @@ require_once __DIR__ . '/../../includes/layout/header.php';
                   <span class="badge bg-<?= $visColor[$f['visibility']] ?>">
                     <?= $visLabel[$f['visibility']] ?>
                   </span>
+                  <?php if ($f['can_edit_by'] === 'pic_only'): ?>
+                    <span class="badge bg-danger ms-1">Edit PIC</span>
+                  <?php else: ?>
+                    <span class="badge bg-light text-dark ms-1 border">Edit Panitia</span>
+                  <?php endif; ?>
                 </td>
                 <td class="fs-12"><?= htmlspecialchars($f['uploader']??'—') ?></td>
                 <td class="fs-12"><?= date('d M Y H:i', strtotime($f['created_at'])) ?></td>
                 <td>
-                  <a href="<?= BASE_URL ?>/modules/files/download.php?id=<?= $f['id'] ?>"
-                     class="btn btn-sm btn-outline-primary" title="Download">
-                    <i class="bi bi-download"></i>
-                  </a>
-                  <?php if ($isEventAdmin || ($f['uploaded_by']==$_SESSION['user_id'])): ?>
+              <a href="<?= BASE_URL ?>/modules/files/preview.php?id=<?= $f['id'] ?>"
+                 class="btn btn-sm btn-outline-secondary" title="Preview">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="<?= BASE_URL ?>/modules/files/download.php?id=<?= $f['id'] ?>"
+                 class="btn btn-sm btn-outline-primary ms-1" title="Download">
+                <i class="bi bi-download"></i>
+              </a>
+              <?php if ($isEventAdmin || $isPic || ($f['uploaded_by']==$_SESSION['user_id'])): ?>
+                <a href="<?= BASE_URL ?>/modules/files/edit.php?id=<?= $f['id'] ?>"
+                   class="btn btn-sm btn-outline-warning ms-1" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              <?php endif; ?>
+              <?php if ($isEventAdmin || ($f['uploaded_by']==$_SESSION['user_id'])): ?>
                     <a href="<?= BASE_URL ?>/modules/files/delete.php?id=<?= $f['id'] ?>&event_id=<?= $id ?>"
                        class="btn btn-sm btn-outline-danger ms-1" title="Hapus"
                        data-confirm="Hapus file ini?">
@@ -502,16 +443,16 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           </td>
           <td class="fs-12"><?= htmlspecialchars($p['divisi']??'—') ?></td>
           <td>
-            <span class="badge <?= ['pic'=>'bg-primary','panitia_inti'=>'bg-info text-dark','panitia_support'=>'bg-secondary'][$p['peran_acara']] ?>">
-              <?= $peranLabel[$p['peran_acara']] ?>
+            <span class="badge bg-secondary">
+              <?= $p['peran_acara'] === 'pic' ? 'PIC' : (($p['is_event_admin'] ?? 0) ? 'Panitia Inti' : 'Panitia Biasa') ?>
             </span>
             <?php if ($p['is_event_admin']): ?><span class="badge bg-warning text-dark ms-1"><i class="bi bi-star-fill"></i> Admin</span><?php endif; ?>
           </td>
           <td><?= htmlspecialchars($p['bagian']??'—') ?></td>
           <td>
             <span class="badge bg-<?= $konfirmColor[$p['status_konfirmasi']] ?>"><?= $konfirmLabel[$p['status_konfirmasi']] ?></span>
-            <?php if ($p['status_konfirmasi']==='tidak_bisa' && $p['alasan_tolak']): ?>
-              <div class="fs-12 text-danger mt-1">Alasan: <?= htmlspecialchars($p['alasan_tolak']) ?></div>
+            <?php if ($p['status_konfirmasi']==='tidak_bisa' && $p['catatan']): ?>
+              <div class="fs-12 text-danger mt-1">Alasan: <?= htmlspecialchars($p['catatan']) ?></div>
             <?php endif; ?>
           </td>
           <?php if ($isEventAdmin): ?>
@@ -816,13 +757,19 @@ $totalPanitiaEval = count($panitia);
       </div>
       <form method="POST" action="<?= BASE_URL ?>/modules/panitia/bulk_invite.php">
         <input type="hidden" name="event_id" value="<?= $id ?>">
+        <input type="hidden" name="peran_acara" value="panitia_inti">
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">Peran</label>
-            <select name="peran_acara" class="form-select form-select-sm" required>
-              <option value="panitia_inti">Panitia Inti</option>
-              <option value="panitia_support">Panitia Support</option>
+            <label class="form-label">Bagian / Divisi</label>
+            <select name="bagian_select" id="quickBagianSelect" class="form-select form-select-sm">
+              <option value="">-- Pilih bagian --</option>
+              <?php foreach ($panitiaBagianOptions as $b): ?>
+                <option value="<?= htmlspecialchars($b) ?>"><?= htmlspecialchars($b) ?></option>
+              <?php endforeach; ?>
+              <option value="__custom__">Bagian lain...</option>
             </select>
+            <input type="text" name="bagian" id="quickBagianCustom" class="form-control form-control-sm mt-2 d-none" placeholder="Ketik bagian lain jika tidak ada dalam daftar">
+            <div class="form-text">Bagian ini akan dipakai untuk semua SDM yang dipilih.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Cari & Pilih SDM</label>
@@ -868,6 +815,19 @@ document.getElementById('quickSearch')?.addEventListener('input', function() {
     item.style.display = (name.includes(q) || divisi.includes(q)) ? '' : 'none';
   });
 });
+const quickBagianSelect = document.getElementById('quickBagianSelect');
+const quickBagianCustom = document.getElementById('quickBagianCustom');
+if (quickBagianSelect) {
+  quickBagianSelect.addEventListener('change', function() {
+    if (this.value === '__custom__') {
+      quickBagianCustom.classList.remove('d-none');
+      quickBagianCustom.focus();
+    } else {
+      quickBagianCustom.classList.add('d-none');
+      quickBagianCustom.value = '';
+    }
+  });
+}
 document.querySelectorAll('.sdm-check-quick').forEach(chk => {
   chk.addEventListener('change', function() {
     const cnt = document.querySelectorAll('.sdm-check-quick:checked').length;
