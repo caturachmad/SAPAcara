@@ -165,7 +165,8 @@ $jabatanSistemLabel = [
       <select name="role" class="form-select form-select-sm">
         <option value="">Semua Role</option>
         <option value="superadmin" <?= $roleFilter==='superadmin'?'selected':'' ?>>Super Admin</option>
-        <option value="staff" <?= $roleFilter==='staff'?'selected':'' ?>>Staff</option>
+        <option value="admin"      <?= $roleFilter==='admin'?'selected':'' ?>>Admin</option>
+        <option value="staff"      <?= $roleFilter==='staff'?'selected':'' ?>>Staff</option>
       </select>
     </div>
     <div class="col-md-auto d-flex gap-2">
@@ -325,7 +326,7 @@ $jabatanSistemLabel = [
           <div class="mb-4">
             <label class="form-label fw-700">Role Sistem</label>
             <div class="row g-2">
-              <div class="col-6">
+              <div class="col-4">
                 <input type="radio" class="btn-check" name="role_sistem" id="roleStaff" value="staff">
                 <label class="btn btn-outline-secondary w-100 text-start" for="roleStaff">
                   <i class="bi bi-person me-2"></i>
@@ -333,7 +334,15 @@ $jabatanSistemLabel = [
                   <div class="fs-12 mt-1 fw-400">Akses standar</div>
                 </label>
               </div>
-              <div class="col-6">
+              <div class="col-4">
+                <input type="radio" class="btn-check" name="role_sistem" id="roleAdmin" value="admin">
+                <label class="btn btn-outline-primary w-100 text-start" for="roleAdmin">
+                  <i class="bi bi-shield-half me-2"></i>
+                  <strong>Admin</strong>
+                  <div class="fs-12 mt-1 fw-400">Akses administrasi</div>
+                </label>
+              </div>
+              <div class="col-4">
                 <input type="radio" class="btn-check" name="role_sistem" id="roleSuperadmin" value="superadmin">
                 <label class="btn btn-outline-danger w-100 text-start" for="roleSuperadmin">
                   <i class="bi bi-shield-fill me-2"></i>
@@ -455,6 +464,7 @@ $jabatanSistemLabel = [
               <label class="form-label">Role Sistem</label>
               <select name="role_sistem" class="form-select">
                 <option value="staff">Staff</option>
+                <option value="admin">Admin</option>
                 <option value="superadmin">Super Admin</option>
               </select>
             </div>
@@ -521,7 +531,9 @@ document.querySelectorAll('.edit-user-btn').forEach(btn => {
     document.getElementById('editEmail').value = this.dataset.email;
     document.getElementById('editDivisi').value = this.dataset.divisi;
     document.getElementById('editJabatan').value = this.dataset.jabatan;
-    document.getElementById(this.dataset.role === 'superadmin' ? 'roleSuperadmin' : 'roleStaff').checked = true;
+    const roleMap = { superadmin: 'roleSuperadmin', admin: 'roleAdmin', staff: 'roleStaff' };
+    const roleRadio = roleMap[this.dataset.role] ?? 'roleStaff';
+    document.getElementById(roleRadio).checked = true;
     document.getElementById('jabatanSistemSelect').value = this.dataset.jabatanSistem || 'staff';
     document.getElementById('resetPassword').checked = false;
     updateJabatanInfo();

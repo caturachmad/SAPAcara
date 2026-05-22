@@ -156,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file_excel']) && $_F
                 $passRaw  = trim((string)($row[6] ?? ''));
                 $pass     = $passRaw === '' ? null : $passRaw;
 
-                if (!in_array($role, ['staff','superadmin'])) $role = 'staff';
+                if (!in_array($role, ['staff','admin','superadmin'])) $role = 'staff';
 
                 $rowErrors = [];
                 if (!$nama)  $rowErrors[] = 'Nama kosong';
@@ -339,7 +339,7 @@ $skipCount  = count($preview) - $validCount;
           echo htmlspecialchars($divText);
         ?></td></tr>
         <tr><td class="text-center fw-700">E</td><td><code>jabatan</code></td><td><span class="badge bg-secondary">Opsional</span></td><td>Jabatan SDM</td></tr>
-        <tr><td class="text-center fw-700">F</td><td><code>role_sistem</code></td><td><span class="badge bg-secondary">Opsional</span></td><td><code>staff</code> (default) / <code>superadmin</code></td></tr>
+        <tr><td class="text-center fw-700">F</td><td><code>role_sistem</code></td><td><span class="badge bg-secondary">Opsional</span></td><td><code>staff</code> (default) / <code>admin</code> / <code>superadmin</code></td></tr>
         <tr><td class="text-center fw-700">G</td><td><code>password</code></td><td><span class="badge bg-secondary">Opsional</span></td><td>Default: <code>password</code></td></tr>
       </tbody>
     </table>
@@ -421,7 +421,7 @@ $skipCount  = count($preview) - $validCount;
             <td class="fs-12"><?= htmlspecialchars($r['email'] ?: '—') ?></td>
             <td><?= htmlspecialchars($r['divisi'] ?: '—') ?></td>
             <td class="fs-12"><?= htmlspecialchars($r['jabatan'] ?: '—') ?></td>
-            <td><span class="badge <?= $r['role']==='superadmin'?'bg-danger':'bg-secondary' ?>"><?= $r['role'] ?></span></td>
+            <td><span class="badge <?= $r['role']==='superadmin'?'bg-danger':($r['role']==='admin'?'bg-primary':'bg-secondary') ?>"><?= $r['role'] ?></span></td>
             <td>
               <?php if ($isErr): ?>
                 <span class="badge bg-danger">❌ Error</span>

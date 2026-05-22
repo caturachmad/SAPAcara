@@ -14,6 +14,20 @@ if (isLoggedIn()) {
 
 $error = '';
 
+// ── Cek maintenance mode ──────────────────────────────────────────────────────
+// Query langsung tanpa helper karena user belum login
+$maintenanceRow = $pdo->query(
+    "SELECT setting_value FROM system_settings WHERE setting_key = 'maintenance_mode' LIMIT 1"
+)->fetchColumn();
+$inMaintenance = ($maintenanceRow === '1');
+$maintenanceMsgRow = '';
+if ($inMaintenance) {
+    $maintenanceMsgRow = (string)$pdo->query(
+        "SELECT setting_value FROM system_settings WHERE setting_key = 'maintenance_msg' LIMIT 1"
+    )->fetchColumn();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email    = trim($_POST['email']    ?? '');
     $password =       $_POST['password'] ?? '';
@@ -26,11 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $u = $stmt->fetch();
 
         if ($u && password_verify($password, $u['password'])) {
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = $u['id'];
-            $_SESSION['user']    = $u;
-            header('Location: ' . BASE_URL . '/modules/dashboard/select.php');
-            exit;
+            // Blokir login saat maintenance — kecuali superadmin
+            if ($inMaintenance && ($u['role_sistem'] ?? '') !== 'superadmin') {
+                $msg = $maintenanceMsgRow ?: 'Sistem sedang dalam pemeliharaan.';
+                $error = '🔧 ' . $msg;
+            } else {
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = $u['id'];
+                $_SESSION['user']    = $u;
+                // Load permission role ke session agar hasPermission() tidak perlu
+                // query DB setiap request. Cache ini di-refresh saat settings diubah.
+                loadPermissions($pdo);
+                header('Location: ' . BASE_URL . '/modules/dashboard/select.php');
+                exit;
+            }
         }
         $error = 'Email atau password salah.';
     }
@@ -192,6 +215,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <!-- Body — hanya 1 form -->
       <div class="card-body-login">
+
+        <?php if ($inMaintenance): ?>
+          <div class="error-box" style="background:#fefce8;border-color:#fde68a;color:#92400e;">
+            <i class="bi bi-tools" style="flex-shrink:0"></i>
+            <span>Sistem dalam mode maintenance. Hanya Super Admin yang dapat masuk.</span>
+          </div>
+        <?php endif; ?>
 
         <?php if ($error): ?>
           <div class="error-box">
