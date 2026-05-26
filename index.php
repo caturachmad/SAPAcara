@@ -1,6 +1,6 @@
 <?php
 $pageTitle = 'Manajemen SDM';
-require_once __DIR__ . '/../../includes/layout/header.php';
+require_once __DIR__ . '/includes/layout/header.php';
 if (!isSuperAdmin()) { header('Location: ' . BASE_URL . '/modules/dashboard/select.php'); exit; }
 
 // ── Handle edit user ──
@@ -605,4 +605,4 @@ bulkDeactivateBtn?.addEventListener('click', function () {
 
 </script>
 
-<?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>
+<?php require_once __DIR__ . '/includes/layout/footer.php'; ?>

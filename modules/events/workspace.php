@@ -1119,7 +1119,6 @@ require_once __DIR__ . '/../../includes/layout/header.php';
   </div>
 
   <?php else: ?>
-  <!-- Panitia: sudah isi -->
   <div class="text-center py-4 mb-4">
     <div style="width:72px;height:72px;background:#f0fdf4;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
       <i class="bi bi-check-circle-fill text-success fs-1"></i>
@@ -1131,7 +1130,6 @@ require_once __DIR__ . '/../../includes/layout/header.php';
     <?php endif; ?>
   </div>
 
-  <!-- Ringkasan jawaban user -->
   <div class="row justify-content-center">
     <div class="col-md-8">
       <div class="card">
@@ -1161,11 +1159,11 @@ require_once __DIR__ . '/../../includes/layout/header.php';
     </div>
   </div>
 
-  <?php endif; // end panitia states ?>
-<?php endif; // end isPic / panitia ?>
+  <?php endif;?>
+<?php endif;?>
 
-</div><!-- end #swot tab-pane -->
-<?php endif; // end status === selesai ?>
+</div>
+<?php endif;?>
 
 <!-- ── TAB: EVALUASI (existing, kept as-is) ── -->
 <div class="tab-pane fade" id="evaluasi">
@@ -1282,7 +1280,7 @@ $totalPanitiaEval = count($panitia);
 </div>
 <?php endif; ?>
 
-</div><!-- end tab-content -->
+</div>
 
 <script>
 // Approval table row selection
