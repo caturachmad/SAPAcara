@@ -65,7 +65,7 @@ $notifColor = ['info'=>'#0ea5e9','success'=>'#10b981','warning'=>'#f59e0b','dang
           <span class="fw-700 fs-13">Notifikasi</span>
           <div class="d-flex gap-2 align-items-center">
             <?php if ($unreadNotif > 0): ?>
-            <form method="POST" action="<?= BASE_URL ?>/modules/notifications/read_all.php" style="display:inline"><button type="submit" class="btn btn-link fs-12 text-primary p-0" style="white-space:nowrap">Tandai dibaca</button></form>
+            <form method="POST" action="<?= BASE_URL ?>/modules/notifications/read_all.php" style="display:inline"><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><button type="submit" class="btn btn-link fs-12 text-primary p-0" style="white-space:nowrap">Tandai dibaca</button></form>
             <?php endif; ?>
             <button onclick="document.getElementById('notifPanel').classList.remove('open')" class="btn-close" style="font-size:.7rem"></button>
           </div>
@@ -143,10 +143,10 @@ $notifColor = ['info'=>'#0ea5e9','success'=>'#10b981','warning'=>'#f59e0b','dang
 <main id="main">
 <?php if (isset($_SESSION['flash'])): ?>
   <?php $ft=$_SESSION['flash']['type']; ?>
-  <div class="alert alert-<?= $ft ?> alert-dismissible alert-auto d-flex align-items-center gap-2 mb-4" style="max-height:200px">
+  <div class="alert alert-<?= $ft ?> alert-auto d-flex align-items-center gap-2 mb-4" style="max-height:200px">
     <i class="bi bi-<?= $ft==='success'?'check-circle-fill':'exclamation-triangle-fill' ?> flex-shrink-0"></i>
     <span class="flex-grow-1"><?= htmlspecialchars($_SESSION['flash']['msg']) ?></span>
-    <button type="button" class="btn-close ms-2 flex-shrink-0" data-bs-dismiss="alert"></button>
+    <button type="button" class="btn-close ms-auto" aria-label="Tutup"></button>
   </div>
   <?php unset($_SESSION['flash']); ?>
 <?php endif; ?>

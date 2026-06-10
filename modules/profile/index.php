@@ -73,8 +73,11 @@ $riwayat->execute([$uid]); $riwayatList = $riwayat->fetchAll();
       <div class="card-header fw-semibold small"><i class="bi bi-bar-chart me-2"></i>Statistik Saya</div>
       <div class="card-body">
         <?php
-        $totalPIC = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=? AND peran_acara='pic'")->execute([$uid]) ? $pdo->query("SELECT COUNT(*) FROM event_panitia WHERE user_id=$uid AND peran_acara='pic'")->fetchColumn() : 0;
-        $totalIkut = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=?")->execute([$uid]) ? $pdo->query("SELECT COUNT(*) FROM event_panitia WHERE user_id=$uid")->fetchColumn() : 0;
+        $stmtPIC2 = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=? AND peran_acara='pic'");
+        $stmtPIC2->execute([$uid]); $totalPIC = (int)$stmtPIC2->fetchColumn();
+
+        $stmtIkut = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=?");
+        $stmtIkut->execute([$uid]); $totalIkut = (int)$stmtIkut->fetchColumn();
         ?>
         <div class="d-flex justify-content-between mb-2">
           <span class="small text-muted">Acara sebagai PIC</span>
@@ -94,6 +97,7 @@ $riwayat->execute([$uid]); $riwayatList = $riwayat->fetchAll();
       <div class="card-header"><i class="bi bi-pencil me-2"></i>Edit Profil</div>
       <div class="card-body">
         <form method="POST" class="row g-3">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Nama Lengkap</label>
             <input type="text" name="nama" class="form-control" value="<?= htmlspecialchars($me['nama']) ?>" required>
@@ -125,6 +129,7 @@ $riwayat->execute([$uid]); $riwayatList = $riwayat->fetchAll();
       <div class="card-header"><i class="bi bi-lock me-2"></i>Ganti Password</div>
       <div class="card-body">
         <form method="POST" class="row g-3">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
           <div class="col-12">
             <label class="form-label fw-semibold">Password Lama</label>
             <input type="password" name="password_lama" class="form-control" required>

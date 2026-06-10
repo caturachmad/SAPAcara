@@ -351,6 +351,7 @@ $skipCount  = count($preview) - $validCount;
   <div class="card-header"><i class="bi bi-cloud-upload"></i> Upload File Excel</div>
   <div class="card-body">
     <form method="POST" enctype="multipart/form-data">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
       <div class="mb-3">
         <label class="form-label">Pilih File</label>
         <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls,.csv" required>
@@ -448,6 +449,7 @@ $skipCount  = count($preview) - $validCount;
 <div class="d-flex gap-3 align-items-center flex-wrap">
   <?php if ($validCount > 0): ?>
   <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
     <input type="hidden" name="import_data" value="<?= htmlspecialchars(json_encode($preview)) ?>">
     <button type="submit" name="confirm_import" class="btn btn-success btn-lg"
             data-confirm="Import <?= $validCount ?> SDM ke sistem? <?= $skipCount ?> baris akan dilewati.">

@@ -2,60 +2,171 @@
 $pageTitle = 'Semua Acara';
 require_once __DIR__ . '/../../includes/layout/header.php';
 
-$uid  = $_SESSION['user_id'];
-$role = $user['role_sistem'];
+$uid = $_SESSION['user_id'];
+$role = $user['role_sistem'] ?? 'staff';
+$isSuperAdmin = isSuperAdmin();
+
+$allowedStatuses = [
+    'draft' => 'Draft',
+    'pengajuan' => 'Diajukan',
+    'disetujui_manager' => 'Disetujui Manager',
+    'proposal_dibuat' => 'Proposal Dibuat',
+    'rab_diajukan' => 'RAB Diajukan',
+    'perijinan' => 'Perijinan',
+    'disetujui' => 'Disetujui',
+    'berlangsung' => 'Berlangsung',
+    'selesai' => 'Selesai',
+    'ditolak' => 'Ditolak',
+];
+$statusPill = [
+    'draft' => 's-draft',
+    'pengajuan' => 's-pengajuan',
+    'disetujui_manager' => 's-pengajuan',
+    'proposal_dibuat' => 's-pengajuan',
+    'rab_diajukan' => 's-pengajuan',
+    'perijinan' => 's-pengajuan',
+    'disetujui' => 's-disetujui',
+    'berlangsung' => 's-berlangsung',
+    'selesai' => 's-selesai',
+    'ditolak' => 's-ditolak',
+];
+$allowedLevels = ['TK', 'SD', 'SMP', 'Umum'];
 
 $filterStatus = $_GET['status'] ?? '';
-$filterLevel  = $_GET['level']  ?? '';
-$search       = $_GET['q']      ?? '';
+$filterLevel = $_GET['level'] ?? '';
+$search = trim((string)($_GET['q'] ?? ''));
 
-$params = [];
-
-// Superadmin: lihat semua | Staff: hanya acara yang diikuti
-if ($role === 'superadmin') {
-    $join  = "LEFT JOIN users u ON u.id = e.pic_id";
-    $where = "WHERE 1=1";
-} else {
-    $join  = "JOIN event_panitia ep ON ep.event_id = e.id AND ep.user_id = ?
-              LEFT JOIN users u ON u.id = e.pic_id";
-    $where = "WHERE 1=1";
-    $params[] = $uid;
+if (!isset($allowedStatuses[$filterStatus])) {
+    $filterStatus = '';
+}
+if (!in_array($filterLevel, $allowedLevels, true)) {
+    $filterLevel = '';
 }
 
-if ($filterStatus) { $where .= " AND e.status = ?";      $params[] = $filterStatus; }
-if ($filterLevel)  { $where .= " AND e.level = ?";       $params[] = $filterLevel; }
-if ($search)       { $where .= " AND e.judul LIKE ?";    $params[] = "%$search%"; }
+$conditions = [];
+$params = [];
 
-$sql = "SELECT DISTINCT e.*, u.nama AS nama_pic,
-               (SELECT COUNT(*) FROM event_panitia ep2 WHERE ep2.event_id = e.id) AS jml_panitia
-        FROM events e
-        $join
-        $where
-        ORDER BY e.tanggal_mulai DESC";
+if (!$isSuperAdmin) {
+    $conditions[] = 'EXISTS (SELECT 1 FROM event_panitia ep WHERE ep.event_id = e.id AND ep.user_id = ?)';
+    $params[] = $uid;
+}
+if ($filterStatus !== '') {
+    $conditions[] = 'e.status = ?';
+    $params[] = $filterStatus;
+}
+if ($filterLevel !== '') {
+    $conditions[] = 'e.level = ?';
+    $params[] = $filterLevel;
+}
+if ($search !== '') {
+    $conditions[] = 'e.judul LIKE ?';
+    $params[] = "%{$search}%";
+}
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$events = $stmt->fetchAll();
+$whereClause = '';
+if ($conditions !== []) {
+    $whereClause = 'WHERE ' . implode(' AND ', $conditions);
+}
 
-$statusLabel = ['draft'=>'Draft','pengajuan'=>'Diajukan','disetujui_manager'=>'Disetujui Manager',
-  'proposal_dibuat'=>'Proposal Dibuat','rab_diajukan'=>'RAB Diajukan','perijinan'=>'Perijinan',
-  'disetujui'=>'Disetujui','berlangsung'=>'Berlangsung','selesai'=>'Selesai','ditolak'=>'Ditolak'];
-$statusPill = ['draft'=>'s-draft','pengajuan'=>'s-pengajuan','disetujui_manager'=>'s-pengajuan',
-  'proposal_dibuat'=>'s-pengajuan','rab_diajukan'=>'s-pengajuan','perijinan'=>'s-pengajuan',
-  'disetujui'=>'s-disetujui','berlangsung'=>'s-berlangsung','selesai'=>'s-selesai','ditolak'=>'s-ditolak'];
+$page = max(1, (int)($_GET['page'] ?? 1));
+$pageSize = 20;
+$totalPages = 1;
+$queryParams = [
+    'status' => $filterStatus,
+    'level' => $filterLevel,
+    'q' => $search,
+];
+
+$totalEvents = 0;
+$events = [];
+$queryError = '';
+
+try {
+    $countSql = "SELECT COUNT(*) FROM events e
+                 LEFT JOIN users u ON u.id = e.pic_id
+                 {$whereClause}";
+    $countStmt = $pdo->prepare($countSql);
+    $countStmt->execute($params);
+    $totalEvents = (int)$countStmt->fetchColumn();
+
+    $totalPages = max(1, (int)ceil($totalEvents / $pageSize));
+    if ($page > $totalPages) {
+        $page = $totalPages;
+    }
+    $offset = ($page - 1) * $pageSize;
+
+    $eventSql = "SELECT e.id, e.judul, e.level, e.tanggal_mulai, e.tanggal_selesai,
+                        e.lokasi, e.status, e.pic_id,
+                        u.nama AS nama_pic,
+                        (SELECT COUNT(*) FROM event_panitia ep2 WHERE ep2.event_id = e.id) AS jml_panitia,
+                        (SELECT COUNT(*) FROM event_files ef WHERE ef.event_id = e.id AND ef.file_type IN ('proposal','rab')) AS docs_count
+                 FROM events e
+                 LEFT JOIN users u ON u.id = e.pic_id
+                 {$whereClause}
+                 ORDER BY e.tanggal_mulai DESC
+                 LIMIT ? OFFSET ?";
+
+    $eventStmt = $pdo->prepare($eventSql);
+    $eventParams = array_merge($params, [$pageSize, $offset]);
+    $eventStmt->execute($eventParams);
+    $events = $eventStmt->fetchAll();
+} catch (PDOException $e) {
+    error_log('[events/index] ' . $e->getMessage());
+    $queryError = 'Gagal memuat daftar acara. Silakan coba lagi nanti.';
+}
+
+function getDaysUntilStart(string $dateString): ?int {
+    try {
+        $eventDate = new DateTimeImmutable($dateString);
+        $today = new DateTimeImmutable('today');
+        return (int)$today->diff($eventDate)->format('%r%a');
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function getStatusLabel(string $status, array $map): string {
+    return $map[$status] ?? 'Tidak diketahui';
+}
+
+function getNextTask(string $status, int $docsCount, int $panitiaCount): string {
+    return match ($status) {
+        'draft' => $docsCount > 0 ? 'Ajukan ke manager' : 'Upload proposal/RAB',
+        'pengajuan' => 'Tunggu keputusan manager',
+        'disetujui_manager' => 'Upload RAB atau dokumen pendukung',
+        'proposal_dibuat' => 'Upload RAB',
+        'rab_diajukan' => 'Tunggu approval bendahara',
+        'perijinan' => 'Pantau proses perijinan',
+        'disetujui' => $panitiaCount > 1 ? 'Undang panitia & siapkan acara' : 'Undang panitia',
+        'berlangsung' => 'Pantau acara & dokumentasi',
+        'selesai' => 'Acara selesai',
+        'ditolak' => 'Revisi dokumen & ajukan kembali',
+        default => 'Periksa detail acara',
+    };
+}
+
+function getStatusPillClass(string $status, array $map): string {
+    return $map[$status] ?? 's-draft';
+}
 ?>
 
 <div class="page-header">
   <div>
     <h5>Semua Acara</h5>
     <div class="sub">
-      <?= $role === 'superadmin' ? count($events).' acara total di sistem' : count($events).' acara yang kamu ikuti' ?>
+      <?= $role === 'superadmin' ? $totalEvents.' acara total di sistem' : $totalEvents.' acara yang kamu ikuti' ?>
     </div>
   </div>
   <a href="<?= BASE_URL ?>/modules/events/create.php" class="btn btn-primary">
     <i class="bi bi-plus-circle me-1"></i> Buat Acara Baru
   </a>
 </div>
+
+<?php if ($queryError): ?>
+  <div class="alert alert-danger mb-4" role="alert">
+    <?= htmlspecialchars($queryError) ?>
+  </div>
+<?php endif; ?>
 
 <!-- Filter -->
 <div class="filter-bar mb-4">
@@ -80,8 +191,8 @@ $statusPill = ['draft'=>'s-draft','pengajuan'=>'s-pengajuan','disetujui_manager'
       <label class="form-label">Status</label>
       <select name="status" class="form-select form-select-sm">
         <option value="">Semua Status</option>
-        <?php foreach ($statusLabel as $k=>$v): ?>
-          <option value="<?= $k ?>" <?= $filterStatus===$k?'selected':'' ?>><?= $v ?></option>
+        <?php foreach ($allowedStatuses as $k => $v): ?>
+          <option value="<?= htmlspecialchars($k) ?>" <?= $filterStatus === $k ? 'selected' : '' ?>><?= htmlspecialchars($v) ?></option>
         <?php endforeach; ?>
       </select>
     </div>
@@ -114,46 +225,53 @@ $statusPill = ['draft'=>'s-draft','pengajuan'=>'s-pengajuan','disetujui_manager'
               <th>Tanggal</th>
               <th>PIC</th>
               <th>Panitia</th>
+              <th>Tindakan Selanjutnya</th>
               <th>Status</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
           <?php foreach ($events as $ev):
-            $sisa = ceil((strtotime($ev['tanggal_mulai']) - time()) / 86400);
+            $sisa = getDaysUntilStart((string)($ev['tanggal_mulai'] ?? ''));
+            $level = htmlspecialchars($ev['level'] ?? '');
+            $picName = htmlspecialchars($ev['nama_pic'] ?? '—');
+            $statusKey = $ev['status'] ?? '';
           ?>
             <tr>
               <td>
-                <div class="fw-600"><?= htmlspecialchars($ev['judul']) ?></div>
-                <?php if ($ev['lokasi']): ?>
+                <div class="fw-600"><?= htmlspecialchars($ev['judul'] ?? '') ?></div>
+                <?php if (!empty($ev['lokasi'])): ?>
                   <div class="fs-12 text-muted"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($ev['lokasi']) ?></div>
                 <?php endif; ?>
               </td>
-              <td><span class="badge bg-secondary"><?= $ev['level'] ?></span></td>
+              <td><span class="badge bg-secondary"><?= $level ?></span></td>
               <td>
-                <div class="fs-13"><?= date('d M Y', strtotime($ev['tanggal_mulai'])) ?></div>
-                <?php if ($ev['tanggal_mulai'] !== $ev['tanggal_selesai']): ?>
-                  <div class="fs-12 text-muted">s/d <?= date('d M Y', strtotime($ev['tanggal_selesai'])) ?></div>
+                <div class="fs-13"><?= htmlspecialchars(date('d M Y', strtotime($ev['tanggal_mulai'] ?? ''))) ?></div>
+                <?php if (!empty($ev['tanggal_mulai']) && ($ev['tanggal_mulai'] !== ($ev['tanggal_selesai'] ?? ''))): ?>
+                  <div class="fs-12 text-muted">s/d <?= htmlspecialchars(date('d M Y', strtotime($ev['tanggal_selesai'] ?? ''))) ?></div>
                 <?php endif; ?>
-                <?php if ($sisa >= 0 && $ev['status'] !== 'selesai'): ?>
-                  <div class="fs-12 <?= $sisa<=3?'text-danger':($sisa<=7?'text-warning':'text-muted') ?>">
-                    <?= $sisa===0?'Hari ini':'('.$sisa.' hari lagi)' ?>
+                <?php if ($sisa !== null && $sisa >= 0 && $statusKey !== 'selesai'): ?>
+                  <div class="fs-12 <?= $sisa <= 3 ? 'text-danger' : ($sisa <= 7 ? 'text-warning' : 'text-muted') ?>">
+                    <?= $sisa === 0 ? 'Hari ini' : '(' . $sisa . ' hari lagi)' ?>
                   </div>
                 <?php endif; ?>
               </td>
-              <td class="fs-13"><?= htmlspecialchars($ev['nama_pic'] ?? '—') ?></td>
+              <td class="fs-13"><?= $picName ?></td>
               <td>
                 <span class="badge bg-light text-dark border">
-                  <i class="bi bi-people me-1"></i><?= $ev['jml_panitia'] ?>
+                  <i class="bi bi-people me-1"></i><?= (int)($ev['jml_panitia'] ?? 0) ?>
                 </span>
               </td>
               <td>
-                <span class="status-pill <?= $statusPill[$ev['status']] ?>">
-                  <?= $statusLabel[$ev['status']] ?>
+                <div class="text-muted fs-12"><?= htmlspecialchars(getNextTask($statusKey, (int)$ev['docs_count'], (int)$ev['jml_panitia'])) ?></div>
+              </td>
+              <td>
+                <span class="status-pill <?= htmlspecialchars(getStatusPillClass($statusKey, $statusPill)) ?>">
+                  <?= htmlspecialchars(getStatusLabel($statusKey, $allowedStatuses)) ?>
                 </span>
               </td>
               <td>
-                <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= $ev['id'] ?>"
+                <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= urlencode((string)($ev['id'] ?? '')) ?>"
                    class="btn btn-sm btn-outline-primary">
                   <i class="bi bi-arrow-right-circle me-1"></i>Buka
                 </a>
@@ -165,6 +283,39 @@ $statusPill = ['draft'=>'s-draft','pengajuan'=>'s-pengajuan','disetujui_manager'
       </div>
     </div>
   </div>
+  <?php if ($totalPages > 1): ?>
+    <nav aria-label="Pagination" class="px-3 py-2">
+      <ul class="pagination justify-content-end mb-0">
+        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+          <a class="page-link" href="?<?= htmlspecialchars(http_build_query(array_merge($queryParams, ['page' => $page - 1]))) ?>" tabindex="-1">Sebelumnya</a>
+        </li>
+        <?php
+          $start = max(1, $page - 2);
+          $end = min($totalPages, $page + 2);
+          if ($start > 1):
+        ?>
+          <li class="page-item"><a class="page-link" href="?<?= htmlspecialchars(http_build_query(array_merge($queryParams, ['page' => 1]))) ?>">1</a></li>
+          <?php if ($start > 2): ?>
+            <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+          <?php endif; ?>
+        <?php endif; ?>
+        <?php for ($i = $start; $i <= $end; $i++): ?>
+          <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+            <a class="page-link" href="?<?= htmlspecialchars(http_build_query(array_merge($queryParams, ['page' => $i]))) ?>"><?= $i ?></a>
+          </li>
+        <?php endfor; ?>
+        <?php if ($end < $totalPages): ?>
+          <?php if ($end < $totalPages - 1): ?>
+            <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+          <?php endif; ?>
+          <li class="page-item"><a class="page-link" href="?<?= htmlspecialchars(http_build_query(array_merge($queryParams, ['page' => $totalPages]))) ?>"><?= $totalPages ?></a></li>
+        <?php endif; ?>
+        <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+          <a class="page-link" href="?<?= htmlspecialchars(http_build_query(array_merge($queryParams, ['page' => $page + 1]))) ?>">Berikutnya</a>
+        </li>
+      </ul>
+    </nav>
+  <?php endif; ?>
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>

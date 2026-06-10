@@ -126,6 +126,9 @@ CREATE TABLE IF NOT EXISTS event_checklist (
   id INT AUTO_INCREMENT PRIMARY KEY,
   event_id INT NOT NULL,
   item VARCHAR(300) NOT NULL,
+  deadline DATE NULL,
+  pj VARCHAR(150) NULL,
+  status ENUM('belum','on_progres','selesai') DEFAULT 'belum',
   kategori VARCHAR(100) NULL,
   urutan INT DEFAULT 0,
   is_done TINYINT(1) DEFAULT 0,
@@ -138,3 +141,12 @@ CREATE TABLE IF NOT EXISTS event_checklist (
 
 INSERT INTO users (nama, email, password, divisi, jabatan, role_sistem) VALUES
 ('Administrator', 'admin@sekolah.sch.id', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'IT', 'Admin Sistem', 'superadmin');
+
+-- Migration: Add todo fields to event_checklist
+ALTER TABLE event_checklist
+  ADD COLUMN deadline DATE NULL AFTER item,
+  ADD COLUMN pj VARCHAR(150) NULL AFTER deadline,
+  ADD COLUMN status ENUM('belum','on_progres','selesai') DEFAULT 'belum' AFTER pj;
+
+-- Sync existing rows: if is_done=1, set status='selesai'
+UPDATE event_checklist SET status='selesai' WHERE is_done=1;

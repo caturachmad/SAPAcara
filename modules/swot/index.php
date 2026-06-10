@@ -111,6 +111,7 @@ function topKeywords(array $rows, string $field, int $top = 5): array {
       <div class="card-header"><i class="bi bi-pencil-square me-2"></i>Isi Evaluasi SWOT</div>
       <div class="card-body">
         <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
           <div class="mb-3">
             <label class="form-label fw-semibold">Pilih Acara</label>
             <select name="event_id" class="form-select form-select-sm" required>

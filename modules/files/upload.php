@@ -64,16 +64,19 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
     if (empty($errors)) {
         $dir = __DIR__ . '/../../uploads/events/' . $eventId . '/';
         if (!is_dir($dir)) {
-          if (!mkdir($dir, 0755, true)) {
+          if (!mkdir($dir, 0777, true)) {
             $errors[] = 'Gagal membuat direktori upload. Periksa permission pada folder uploads/.';
+          } else {
+            chmod($dir, 0777);
           }
         }
-        if (!is_writable(dirname($dir)) && !is_writable($dir)) {
-          error_log("[upload] upload dir not writable: {$dir}");
+        if (empty($errors) && (!is_dir($dir) || !is_writable($dir))) {
+          $errors[] = 'Direktori upload tidak dapat diakses. Pastikan folder uploads/ dan subfoldernya dapat ditulis oleh server.';
+          error_log("[upload] upload dir cannot be written: {$dir}");
         }
         $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $target = $dir . $filename;
-        if (move_uploaded_file($f['tmp_name'], $target)) {
+        if (empty($errors) && move_uploaded_file($f['tmp_name'], $target)) {
             $pdo->prepare("INSERT INTO event_files (event_id,nama_file,deskripsi,file_path,file_original,file_type,file_size,visibility,can_edit_by,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?)")
                 ->execute([$eventId,$nama,$desc,'events/'.$eventId.'/'.$filename,$f['name'],$type,$f['size'],$vis,$canEdit,$_SESSION['user_id']]);
           // Jika file adalah RAB, buat approval ke bendahara otomatis
@@ -125,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
   <div class="card-header"><i class="bi bi-upload"></i> Upload File Baru</div>
   <div class="card-body">
     <form method="POST" enctype="multipart/form-data" class="row g-3">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
       <div class="col-12">
         <label class="form-label">File <span class="text-danger">*</span></label>
         <input type="file" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.zip,.rar" required>

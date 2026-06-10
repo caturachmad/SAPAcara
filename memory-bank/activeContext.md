@@ -1,14 +1,16 @@
 # Active context
 
-**Current focus**: Implementasi alur pembuatan acara baru termasuk penugasan panitia dengan bagian/divisi dinamis (Bendahara, Sekretaris, Logistik, Dokumentasi, Konsumsi, Tim Medis, Tim Acara, dll), routing approval berbasis divisi, pembatasan upload dokumen kritis hingga approval manager, dan pengiriman email/undangan otomatis untuk bendahara dan panitia.
+**Current focus**: Menyelesaikan alur event end-to-end dengan task progress, validasi dokumen sebelum pengajuan manager, dan pengalaman pengguna yang lebih jelas di halaman detail/workspace.
 
 **In progress**:
 
 - [x] Implementasi form pembuatan acara (kepanitiaan inti)
 - [x] Approval otomatis untuk manager berdasarkan `level`
 - [x] Pembatasan upload dokumen penting sebelum manager approve
-- [x] Trigger approval + email untuk bendahara ketika RAB diupload
-- [x] Pengiriman undangan email ke panitia teknis setelah pencairan disetujui
+- [x] Perbaikan UI progress pada halaman detail dan workspace untuk menunjukkan langkah berikutnya
+- [x] CTA tombol action di halaman detail dan overview agar pengguna tahu langkah yang harus dilakukan
+- [x] Hint langkah selanjutnya di daftar acara untuk memperjelas proses event
+- [x] Penambahan proteksi agar tidak membuat approval manager duplikat saat masih menunggu status
 - [x] End-to-end testing (lokal)
 - [ ] Dokumentasi akhir dan cleanup (hapus/arsip `e2e_test.php` jika diinginkan)
 

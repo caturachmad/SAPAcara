@@ -150,60 +150,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['toggle_check'])) {
     header("Location: ?id=$id#checklist"); exit;
 }
 
-// ── POST: add todo ────────────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_todo']) && $isEventAdmin) {
-    $item     = trim($_POST['todo_nama'] ?? '');
-    $deadline = trim($_POST['todo_deadline'] ?? '') ?: null;
-    $pj       = trim($_POST['todo_pj'] ?? '') ?: null;
-    $status   = in_array($_POST['todo_status'] ?? '', ['belum','on_progres','selesai']) ? $_POST['todo_status'] : 'belum';
-    if ($item !== '') {
-        $isDone = ($status === 'selesai') ? 1 : 0;
-        $doneAt = $isDone ? date('Y-m-d H:i:s') : null;
-        $doneBy = $isDone ? $_SESSION['user_id'] : null;
-        $maxUrut = $pdo->prepare("SELECT COALESCE(MAX(urutan),0)+1 FROM event_checklist WHERE event_id=?");
-        $maxUrut->execute([$id]); $urutan = (int)$maxUrut->fetchColumn();
-        $pdo->prepare("INSERT INTO event_checklist (event_id, item, deadline, pj, status, urutan, is_done, done_by, done_at) VALUES (?,?,?,?,?,?,?,?,?)")
-            ->execute([$id, $item, $deadline, $pj, $status, $urutan, $isDone, $doneBy, $doneAt]);
-    }
-    header("Location: ?id=$id#checklist"); exit;
-}
-
-// ── POST: update todo status ──────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_todo_status']) && $isEventAdmin) {
-    $cid    = (int)$_POST['check_id'];
-    $status = in_array($_POST['todo_status'] ?? '', ['belum','on_progres','selesai']) ? $_POST['todo_status'] : 'belum';
-    $isDone = ($status === 'selesai') ? 1 : 0;
-    $doneAt = $isDone ? date('Y-m-d H:i:s') : null;
-    $doneBy = $isDone ? $_SESSION['user_id'] : null;
-    $pdo->prepare("UPDATE event_checklist SET status=?, is_done=?, done_by=?, done_at=? WHERE id=? AND event_id=?")
-        ->execute([$status, $isDone, $doneBy, $doneAt, $cid, $id]);
-    header("Location: ?id=$id#checklist"); exit;
-}
-
-// ── POST: delete todo ─────────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['delete_todo']) && $isEventAdmin) {
-    $cid = (int)$_POST['check_id'];
-    $pdo->prepare("DELETE FROM event_checklist WHERE id=? AND event_id=?")->execute([$cid, $id]);
-    header("Location: ?id=$id#checklist"); exit;
-}
-
-// ── POST: edit todo ───────────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['edit_todo']) && $isEventAdmin) {
-    $cid      = (int)$_POST['check_id'];
-    $item     = trim($_POST['todo_nama'] ?? '');
-    $deadline = trim($_POST['todo_deadline'] ?? '') ?: null;
-    $pj       = trim($_POST['todo_pj'] ?? '') ?: null;
-    $status   = in_array($_POST['todo_status'] ?? '', ['belum','on_progres','selesai']) ? $_POST['todo_status'] : 'belum';
-    if ($item !== '') {
-        $isDone = ($status === 'selesai') ? 1 : 0;
-        $doneAt = $isDone ? date('Y-m-d H:i:s') : null;
-        $doneBy = $isDone ? $_SESSION['user_id'] : null;
-        $pdo->prepare("UPDATE event_checklist SET item=?, deadline=?, pj=?, status=?, is_done=?, done_by=?, done_at=? WHERE id=? AND event_id=?")
-            ->execute([$item, $deadline, $pj, $status, $isDone, $doneBy, $doneAt, $cid, $id]);
-    }
-    header("Location: ?id=$id#checklist"); exit;
-}
-
 // ── POST: save WA group link ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_wa']) && $isPic) {
     $pdo->prepare("UPDATE events SET wa_group_link=? WHERE id=?")->execute([trim($_POST['wa_group_link']),$id]);
@@ -536,8 +482,8 @@ if ($isPic && !in_array($ev['status'], ['selesai','ditolak'])):
           <?php endif; ?>
           <?php if ($isPic): ?>
           <form method="POST">
-            <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
             <div class="input-group input-group-sm">
+              <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
               <input type="url" name="wa_group_link" class="form-control" placeholder="https://chat.whatsapp.com/..." value="<?= htmlspecialchars($ev['wa_group_link'] ?? '') ?>">
               <button name="save_wa" class="btn btn-outline-secondary">Simpan</button>
             </div>
@@ -558,8 +504,8 @@ if ($isPic && !in_array($ev['status'], ['selesai','ditolak'])):
           <?php endif; ?>
           <?php if ($isPic): ?>
             <form method="POST" class="mt-3">
-              <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
               <div class="input-group input-group-sm">
+                <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
                 <input type="url" name="link_dokumentasi" class="form-control" placeholder="https://drive.google.com/..." value="<?= htmlspecialchars($ev['link_dokumentasi'] ?? '') ?>">
                 <button name="save_doc" class="btn btn-outline-secondary">Simpan</button>
               </div>
@@ -825,270 +771,39 @@ if ($isPic && !in_array($ev['status'], ['selesai','ditolak'])):
 
 <!-- ── TAB: CHECKLIST ── -->
 <div class="tab-pane fade" id="checklist">
-  <?php
-    $totalTasks  = count($checks);
-    $selesaiTasks = count(array_filter($checks, fn($c) => ($c['status'] ?? ($c['is_done'] ? 'selesai' : 'belum')) === 'selesai'));
-    $pct = $totalTasks ? round($selesaiTasks / $totalTasks * 100) : 0;
-  ?>
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h6 class="fw-700 mb-0">To Do List <span class="text-muted fw-normal fs-13">(<?= $totalTasks ?> task)</span></h6>
-    <div class="d-flex align-items-center gap-2">
-      <?php if ($totalTasks > 0): ?>
-        <span class="badge bg-success fs-12"><?= $pct ?>% Selesai</span>
-      <?php endif; ?>
-      <?php if ($isEventAdmin): ?>
-        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddTodo">
-          <i class="bi bi-plus-lg me-1"></i>Tambah Task
-        </button>
-      <?php endif; ?>
-    </div>
+    <h6 class="fw-700 mb-0">Checklist Persiapan</h6>
+    <?php if ($doneChecks > 0): ?><span class="badge bg-success fs-12"><?= round($doneChecks/max(count($checks),1)*100) ?>% Selesai</span><?php endif; ?>
   </div>
-
-  <?php if ($totalTasks > 0): ?>
-    <div class="progress mb-3" style="height:8px;border-radius:4px">
-      <div class="progress-bar bg-success" style="width:<?= $pct ?>%"></div>
-    </div>
+  <?php if (count($checks) > 0): ?>
     <div class="card">
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0 fs-13">
-          <thead class="table-light">
-            <tr>
-              <th style="width:36px"></th>
-              <th>Nama Task</th>
-              <th style="width:130px">Deadline</th>
-              <th style="width:160px">PJ</th>
-              <th style="width:140px">Status</th>
-              <?php if ($isEventAdmin): ?><th style="width:60px"></th><?php endif; ?>
-            </tr>
-          </thead>
-          <tbody>
-          <?php foreach ($checks as $c):
-            $st = $c['status'] ?? ($c['is_done'] ? 'selesai' : 'belum');
-            $stLabel = ['belum'=>'Belum Mulai','on_progres'=>'On Progress','selesai'=>'Selesai'];
-            $stBadge = ['belum'=>'secondary','on_progres'=>'warning text-dark','selesai'=>'success'];
-          ?>
-            <tr class="<?= $st==='selesai' ? 'table-success bg-opacity-25' : '' ?>">
-              <td class="text-center">
-                <?php if ($isEventAdmin): ?>
-                <form method="POST" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-                  <input type="hidden" name="update_todo_status" value="1">
-                  <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
-                  <input type="hidden" name="todo_status" value="<?= $st==='selesai' ? 'belum' : 'selesai' ?>">
-                  <button type="submit" class="btn p-0 border-0 bg-transparent">
-                    <i class="bi bi-<?= $st==='selesai' ? 'check-circle-fill text-success' : 'circle text-muted' ?> fs-5"></i>
-                  </button>
-                </form>
-                <?php else: ?>
-                  <i class="bi bi-<?= $st==='selesai' ? 'check-circle-fill text-success' : ($st==='on_progres' ? 'clock-fill text-warning' : 'circle text-muted') ?> fs-5"></i>
-                <?php endif; ?>
-              </td>
-              <td>
-                <span class="<?= $st==='selesai' ? 'text-decoration-line-through text-muted' : '' ?>">
-                  <?= htmlspecialchars($c['item']) ?>
-                </span>
-                <?php if ($c['kategori'] ?? ''): ?>
-                  <span class="badge bg-light text-dark border ms-1 fs-12"><?= htmlspecialchars($c['kategori']) ?></span>
-                <?php endif; ?>
-              </td>
-              <td>
-                <?php if ($c['deadline'] ?? ''): ?>
-                  <?php
-                    $dl = new DateTime($c['deadline']);
-                    $now = new DateTime();
-                    $isLate = $st !== 'selesai' && $dl < $now;
-                  ?>
-                  <span class="<?= $isLate ? 'text-danger fw-600' : '' ?>">
-                    <?php if ($isLate): ?><i class="bi bi-exclamation-circle me-1"></i><?php endif; ?>
-                    <?= $dl->format('d M Y') ?>
-                  </span>
-                <?php else: ?>
-                  <span class="text-muted">—</span>
-                <?php endif; ?>
-              </td>
-              <td>
-                <?php if ($c['pj'] ?? ''): ?>
-                  <i class="bi bi-person me-1 text-muted"></i><?= htmlspecialchars($c['pj']) ?>
-                <?php else: ?>
-                  <span class="text-muted">—</span>
-                <?php endif; ?>
-              </td>
-              <td>
-                <?php if ($isEventAdmin): ?>
-                <form method="POST" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-                  <input type="hidden" name="update_todo_status" value="1">
-                  <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
-                  <select name="todo_status" class="form-select form-select-sm py-0" style="min-width:120px"
-                          onchange="this.form.submit()">
-                    <option value="belum"       <?= $st==='belum'       ?'selected':'' ?>>Belum Mulai</option>
-                    <option value="on_progres"  <?= $st==='on_progres'  ?'selected':'' ?>>On Progress</option>
-                    <option value="selesai"     <?= $st==='selesai'     ?'selected':'' ?>>Selesai</option>
-                  </select>
-                </form>
-                <?php else: ?>
-                  <span class="badge bg-<?= $stBadge[$st] ?>"><?= $stLabel[$st] ?></span>
-                <?php endif; ?>
-              </td>
-              <?php if ($isEventAdmin): ?>
-              <td class="text-center">
-                <div class="d-flex gap-2 justify-content-center">
-                  <button type="button" class="btn btn-sm btn-link text-primary p-0"
-                    onclick="openEditTodo(<?= $c['id'] ?>, <?= htmlspecialchars(json_encode($c['item']), ENT_QUOTES) ?>, '<?= htmlspecialchars($c['deadline'] ?? '', ENT_QUOTES) ?>', <?= htmlspecialchars(json_encode($c['pj'] ?? ''), ENT_QUOTES) ?>, '<?= $st ?>')">
-                    <i class="bi bi-pencil-square"></i>
-                  </button>
-                  <form method="POST" onsubmit="return confirm('Hapus task ini?')">
-                    <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-                    <input type="hidden" name="delete_todo" value="1">
-                    <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-link text-danger p-0">
-                      <i class="bi bi-trash3"></i>
-                    </button>
-                  </form>
-                </div>
-              </td>
-              <?php endif; ?>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table>
+      <div class="card-body">
+        <div class="progress mb-3" style="height:8px;border-radius:4px">
+          <div class="progress-bar bg-success" style="width:<?= count($checks)?round($doneChecks/count($checks)*100):0 ?>%"></div>
+        </div>
+        <?php foreach ($checks as $c): ?>
+          <form method="POST" class="d-flex align-items-center gap-2 py-2 border-bottom">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+            <input type="hidden" name="toggle_check" value="1">
+            <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
+            <input type="hidden" name="is_done" value="<?= $c['is_done']?0:1 ?>">
+            <button type="submit" class="btn p-0 border-0 bg-transparent flex-shrink-0">
+              <i class="bi bi-<?= $c['is_done']?'check-circle-fill text-success':'circle text-muted' ?> fs-5"></i>
+            </button>
+            <span class="flex-grow-1 fs-13 <?= $c['is_done']?'text-decoration-line-through text-muted':'' ?>">
+              <?= htmlspecialchars($c['item']) ?>
+              <?php if ($c['kategori']): ?><span class="badge bg-light text-dark border ms-1 fs-12"><?= htmlspecialchars($c['kategori']) ?></span><?php endif; ?>
+            </span>
+          </form>
+        <?php endforeach; ?>
       </div>
     </div>
-
   <?php else: ?>
-    <div class="empty-state">
-      <i class="bi bi-list-check"></i>
-      <p>Belum ada task.</p>
-      <?php if ($isEventAdmin): ?>
-        <button class="btn btn-primary btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#modalAddTodo">
-          <i class="bi bi-plus-lg me-1"></i>Tambah Task Pertama
-        </button>
-      <?php endif; ?>
-    </div>
+    <div class="empty-state"><i class="bi bi-list-check"></i><p>Belum ada checklist.</p></div>
   <?php endif; ?>
 </div>
 
-<!-- ── MODAL: Tambah Todo ── -->
-<?php if ($isEventAdmin): ?>
-<div class="modal fade" id="modalAddTodo" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST">
-        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-        <input type="hidden" name="add_todo" value="1">
-        <div class="modal-header">
-          <h6 class="modal-title fw-700"><i class="bi bi-plus-circle me-2"></i>Tambah Task</h6>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label fw-600">Nama Task <span class="text-danger">*</span></label>
-            <input type="text" name="todo_nama" class="form-control" placeholder="Contoh: Persiapan dekorasi panggung" required maxlength="300">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-600">Deadline</label>
-            <input type="date" name="todo_deadline" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-600">PJ (Penanggung Jawab)</label>
-            <input type="text" name="todo_pj" class="form-control" placeholder="Nama orang atau tim" list="pj-suggestions" maxlength="150">
-            <datalist id="pj-suggestions">
-              <?php foreach ($panitia as $p): ?>
-                <option value="<?= htmlspecialchars($p['nama']) ?>">
-              <?php endforeach; ?>
-              <!-- Common team options -->
-              <option value="Seluruh Panitia">
-              <option value="Tim Logistik">
-              <option value="Tim Dokumentasi">
-              <option value="Tim Konsumsi">
-              <option value="Tim Acara">
-            </datalist>
-            <div class="form-text">Ketik nama langsung atau pilih dari daftar panitia.</div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-600">Status</label>
-            <select name="todo_status" class="form-select">
-              <option value="belum">Belum Mulai</option>
-              <option value="on_progres">On Progress</option>
-              <option value="selesai">Selesai</option>
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Tambah Task</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-<?php endif; ?>
-
-<!-- ── MODAL: Edit Todo ── -->
-<?php if ($isEventAdmin): ?>
-<div class="modal fade" id="modalEditTodo" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" id="formEditTodo">
-        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-        <input type="hidden" name="edit_todo" value="1">
-        <input type="hidden" name="check_id" id="editTodoId">
-        <div class="modal-header">
-          <h6 class="modal-title fw-700"><i class="bi bi-pencil-square me-2"></i>Edit Task</h6>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label fw-600">Nama Task <span class="text-danger">*</span></label>
-            <input type="text" name="todo_nama" id="editTodoNama" class="form-control" required maxlength="300">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-600">Deadline</label>
-            <input type="date" name="todo_deadline" id="editTodoDeadline" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-600">PJ (Penanggung Jawab)</label>
-            <input type="text" name="todo_pj" id="editTodoPj" class="form-control" list="pj-suggestions-edit" maxlength="150">
-            <datalist id="pj-suggestions-edit">
-              <?php foreach ($panitia as $p): ?>
-                <option value="<?= htmlspecialchars($p['nama']) ?>">
-              <?php endforeach; ?>
-              <option value="Seluruh Panitia">
-              <option value="Tim Logistik">
-              <option value="Tim Dokumentasi">
-              <option value="Tim Konsumsi">
-              <option value="Tim Acara">
-            </datalist>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-600">Status</label>
-            <select name="todo_status" id="editTodoStatus" class="form-select">
-              <option value="belum">Belum Mulai</option>
-              <option value="on_progres">On Progress</option>
-              <option value="selesai">Selesai</option>
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Simpan Perubahan</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-<script>
-function openEditTodo(id, nama, deadline, pj, status) {
-  document.getElementById('editTodoId').value       = id;
-  document.getElementById('editTodoNama').value     = nama;
-  document.getElementById('editTodoDeadline').value = deadline;
-  document.getElementById('editTodoPj').value       = pj;
-  document.getElementById('editTodoStatus').value   = status;
-  var modal = new bootstrap.Modal(document.getElementById('modalEditTodo'));
-  modal.show();
-}
-</script>
-<?php endif; ?>
+<!-- ── TAB: APPROVAL (PIC only) ── -->
 <?php if ($isPic): ?>
 <div class="tab-pane fade" id="approval">
   <?php

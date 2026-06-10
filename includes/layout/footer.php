@@ -21,6 +21,16 @@
 <script src="<?= BASE_URL ?>/assets/js/main.js"></script>
 <?php if (isset($extraJs)) echo $extraJs; ?>
 
+<div class="page-loader" id="pageLoader" aria-hidden="true" aria-live="assertive" role="status">
+  <div class="page-loader-card">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <div class="loader-title">Memproses...</div>
+    <div class="loader-subtitle">Tunggu sebentar, tindakan Anda sedang diproses.</div>
+  </div>
+</div>
+
 <script>
 /* ── CSRF: auto-inject token ke semua form POST ── */
 (function () {
@@ -36,6 +46,59 @@
       form.appendChild(inp);
     }
   }, true);
+})();
+
+/* ── Loading overlay and submit buffering ── */
+(function () {
+  const loader = document.getElementById('pageLoader');
+  const setLoading = function (active) {
+    if (!loader) return;
+    loader.classList.toggle('show', active);
+    loader.setAttribute('aria-hidden', active ? 'false' : 'true');
+  };
+
+  document.addEventListener('submit', function (e) {
+    const form = e.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (form.method.toLowerCase() !== 'post') return;
+    if (form.dataset.noBuffer === 'true') return;
+
+    const submit = form.querySelector('button[type=submit], input[type=submit]');
+    const restore = function () {
+      if (!submit) return;
+      submit.disabled = false;
+      if (submit.tagName === 'INPUT') {
+        submit.value = submit.dataset.originalText || submit.value;
+      } else {
+        submit.innerHTML = submit.dataset.originalText || submit.innerHTML;
+      }
+      setLoading(false);
+    };
+
+    if (submit && !submit.disabled) {
+      const isInput = submit.tagName === 'INPUT';
+      submit.disabled = true;
+      submit.dataset.originalText = isInput ? submit.value : submit.innerHTML;
+      if (isInput) {
+        submit.value = 'Memproses...';
+      } else {
+        submit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Memproses...';
+      }
+    }
+    setLoading(true);
+
+    window.requestAnimationFrame(() => {
+      if (e.defaultPrevented) {
+        restore();
+      }
+    });
+  }, true);
+
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) {
+      setLoading(false);
+    }
+  });
 })();
 
 /* ── Confirm Modal ── */

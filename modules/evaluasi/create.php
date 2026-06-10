@@ -1,6 +1,7 @@
 <?php
-$pageTitle = 'Buat Form Evaluasi';
-require_once __DIR__ . '/../../includes/layout/header.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../includes/auth.php';
+requireLogin();
 
 $eventId = (int)($_GET['event_id'] ?? 0);
 if (!$eventId || !(isPIC($eventId,$pdo)||isSuperAdmin())) {
@@ -8,9 +9,10 @@ if (!$eventId || !(isPIC($eventId,$pdo)||isSuperAdmin())) {
 }
 $ev = $pdo->prepare("SELECT * FROM events WHERE id=?");
 $ev->execute([$eventId]); $ev = $ev->fetch();
+if (!$ev) { header('Location:'.BASE_URL.'/modules/dashboard/select.php'); exit; }
 
 $errors = [];
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['simpan'])) {
+if ($_SERVER['REQUEST_METHOD']==='POST') {
     $judul  = trim($_POST['judul']??'');
     $desc   = trim($_POST['deskripsi']??'');
     $ddl    = $_POST['deadline']??null;
@@ -56,10 +58,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['simpan'])) {
             setFlash('Form evaluasi berhasil dibuat!','success');
             header('Location:'.BASE_URL.'/modules/events/workspace.php?id='.$eventId.'#evaluasi'); exit;
         } catch (\Exception $e) {
-            $pdo->rollBack(); $errors[] = 'Error: '.$e->getMessage();
+            $pdo->rollBack();
+            $errors[] = 'Error: '.$e->getMessage();
         }
     }
 }
+
+$pageTitle = 'Buat Form Evaluasi';
+require_once __DIR__ . '/../../includes/layout/header.php';
 ?>
 <div class="page-header">
   <div class="d-flex align-items-center gap-2">
@@ -71,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['simpan'])) {
 <?php if(!empty($errors)): ?><div class="alert alert-danger mb-3"><?php foreach($errors as $e) echo "<div><i class='bi bi-x-circle me-1'></i>$e</div>"; ?></div><?php endif; ?>
 
 <form method="POST">
+  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
 <div class="row g-3">
   <div class="col-md-4">
     <div class="card" style="position:sticky;top:80px">
@@ -108,7 +115,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['simpan'])) {
         <div class="alert alert-info mb-3">
           Form evaluasi ini sudah otomatis mencakup SWOT (Strength, Weakness, Opportunity, Threat) dan Saran.
         </div>
-        <!-- Template pertanyaan awal -->
         <?php
         $tipeOptions = ['textarea'=>'Jawaban Panjang','text'=>'Jawaban Singkat','rating'=>'Rating (1-10)','pilihan_ganda'=>'Pilihan Ganda','ya_tidak'=>'Ya / Tidak'];
         $defaultQ = [

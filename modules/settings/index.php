@@ -82,10 +82,9 @@ $flash     = getFlash();
 ?>
 
 <?php if ($flash): ?>
-  <div class="alert alert-<?= $flash['type'] === 'success' ? 'success' : 'danger' ?> alert-dismissible fade show" role="alert">
+  <div class="alert alert-<?= $flash['type'] === 'success' ? 'success' : 'danger' ?> fade show" role="alert">
     <i class="bi bi-<?= $flash['type'] === 'success' ? 'check-circle' : 'exclamation-circle' ?>-fill me-2"></i>
     <?= htmlspecialchars($flash['msg']) ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
 <?php endif; ?>
 
@@ -122,6 +121,7 @@ $flash     = getFlash();
 <div class="card shadow-sm border-0">
   <div class="card-body p-4">
     <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
       <input type="hidden" name="save_settings" value="1">
 
       <h6 class="fw-700 mb-3 text-uppercase" style="font-size:.75rem;letter-spacing:.08em;color:#64748b;">
@@ -202,6 +202,7 @@ $flash     = getFlash();
 </div>
 
 <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
   <input type="hidden" name="save_permissions" value="1">
   <div class="card shadow-sm border-0">
     <div class="table-responsive">

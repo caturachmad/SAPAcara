@@ -72,6 +72,7 @@ if ($jawab === 'tidak_bisa' && $_SERVER['REQUEST_METHOD']!=='POST') {
             <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= $row['level'] ?></small>
           </div>
           <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
             <div class="mb-3">
               <label class="form-label fw-semibold">Alasan tidak bisa hadir <span class="text-danger">*</span></label>
               <textarea name="alasan" class="form-control" rows="3" placeholder="cth: Ada acara keluarga, sedang sakit, dll." required></textarea>

@@ -9,6 +9,13 @@
 - Email templating disiapkan di `config/mail.php` dan dipakai untuk approval & undangan panitia.
 - Pengundangan panitia diperbarui agar menggunakan `bagian` dinamis sebagai peran/divisi sebenarnya, tanpa memaksa kategori `Panitia Inti` atau `Panitia Support`.
 - UI undang panitia ditingkatkan: dropdown bagian dengan opsi custom, dan pemilihan banyak SDM sekaligus.
+- Duplikasi konfirmasi dihapus dari `assets/js/main.js`; modal konfirmasi sekarang menjadi satu-satunya mekanisme konfirmasi aksi.
+- Tab SWOT di workspace acara sekarang tampil lebih luas untuk status `disetujui`, `berlangsung`, dan `selesai`.
+- Halaman event detail sekarang menampilkan langkah pra-rilis yang jelas: upload proposal/RAB, ajukan manager, undang panitia, atur WA/dokumentasi.
+- Workspace event sekarang memiliki progress card yang menjelaskan status langkah kerja acara dan memandu PIC ke action berikutnya.
+- Halaman detail event kini menampilkan langkah pra-rilis dengan CTA tombol langsung ke upload dokumen, approval, dan tim.
+- Daftar acara menampilkan hint tindakan selanjutnya agar PIC tahu langkah berikutnya tanpa membuka detail.
+- Approval manager duplikat dicegah jika sudah ada permintaan yang menunggu.
 - End-to-end test script (`e2e_test.php`) dibuat dan dijalankan pada environment lokal untuk memverifikasi alur.
 
 **Not started / backlog**

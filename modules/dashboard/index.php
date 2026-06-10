@@ -3,13 +3,24 @@ $pageTitle = 'Dashboard';
 require_once __DIR__ . '/../../includes/layout/header.php';
 $uid  = $_SESSION['user_id'];
 
-// Stats
-$totalPIC     = $pdo->query("SELECT COUNT(*) FROM event_panitia WHERE user_id=$uid AND peran_acara='pic'")->fetchColumn();
-$totalPanitia = $pdo->query("SELECT COUNT(*) FROM event_panitia WHERE user_id=$uid AND peran_acara!='pic'")->fetchColumn();
-$totalPending = $pdo->query("SELECT COUNT(*) FROM event_panitia WHERE user_id=$uid AND status_konfirmasi='pending'")->fetchColumn();
-$totalApproval= $pdo->query("SELECT COUNT(*) FROM approvals WHERE approver_id=$uid AND status='pending'")->fetchColumn();
-$totalSDM     = $pdo->query("SELECT COUNT(*) FROM users WHERE status='aktif'")->fetchColumn();
-$totalEvents  = $pdo->query("SELECT COUNT(*) FROM events WHERE status NOT IN ('selesai','ditolak')")->fetchColumn();
+// Stats — gunakan prepared statements untuk mencegah SQL injection
+$stmtPIC = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=? AND peran_acara='pic'");
+$stmtPIC->execute([$uid]); $totalPIC = (int)$stmtPIC->fetchColumn();
+
+$stmtPanitia = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=? AND peran_acara!='pic'");
+$stmtPanitia->execute([$uid]); $totalPanitia = (int)$stmtPanitia->fetchColumn();
+
+$stmtPending = $pdo->prepare("SELECT COUNT(*) FROM event_panitia WHERE user_id=? AND status_konfirmasi='pending'");
+$stmtPending->execute([$uid]); $totalPending = (int)$stmtPending->fetchColumn();
+
+$stmtUndangan = $pdo->prepare("SELECT ep.id, ep.peran_acara, ep.bagian, ep.token_expires_at, ep.created_at, e.judul, e.tanggal_mulai, e.tanggal_selesai, e.level, u.nama AS nama_pic FROM event_panitia ep JOIN events e ON e.id=ep.event_id LEFT JOIN users u ON u.id=e.pic_id WHERE ep.user_id=? AND ep.status_konfirmasi='pending' ORDER BY ep.created_at DESC");
+$stmtUndangan->execute([$uid]);
+$undanganPending = $stmtUndangan->fetchAll();
+$stmtApproval = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE approver_id=? AND status='pending'");
+$stmtApproval->execute([$uid]); $totalApproval = (int)$stmtApproval->fetchColumn();
+
+$totalSDM    = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status='aktif'")->fetchColumn();
+$totalEvents = (int)$pdo->query("SELECT COUNT(*) FROM events WHERE status NOT IN ('selesai','ditolak')")->fetchColumn();
 
 // Chart: acara per level
 $chartLevel = $pdo->query("SELECT level, COUNT(*) as total FROM events GROUP BY level")->fetchAll();
@@ -59,10 +70,66 @@ $statusClass = ['draft'=>'status-draft','pengajuan'=>'status-pengajuan','disetuj
     <h5 class="fw-bold mb-0">Selamat datang, <?= htmlspecialchars($user['nama']) ?>! 👋</h5>
     <small class="text-muted"><?= date('l, d F Y') ?></small>
   </div>
+  <?php if (hasPermission('buat_acara')): ?>
   <a href="<?= BASE_URL ?>/modules/events/create.php" class="btn btn-primary">
     <i class="bi bi-plus-circle me-1"></i> Buat Acara
   </a>
+  <?php endif; ?>
 </div>
+
+<!-- Undangan Pending -->
+<?php if (!empty($undanganPending)): ?>
+<div class="card border-warning mb-4">
+  <div class="card-header d-flex align-items-center gap-2" style="background:#fffbeb;border-bottom:1px solid #fde68a">
+    <i class="bi bi-envelope-exclamation-fill text-warning"></i>
+    <span class="fw-700">Undangan Menunggu Konfirmasi</span>
+    <span class="badge bg-warning text-dark ms-auto"><?= count($undanganPending) ?></span>
+  </div>
+  <div class="card-body p-0">
+    <?php foreach ($undanganPending as $inv):
+      $sisaHariInv = $inv["token_expires_at"] ? (int)ceil((strtotime($inv["token_expires_at"]) - time()) / 86400) : null;
+      $expiredInv = $sisaHariInv !== null && $sisaHariInv < 0;
+      $peranLabel = ["pic"=>"PIC","panitia_inti"=>"Panitia Inti","panitia_support"=>"Panitia Biasa"];
+    ?>
+    <div class="border-bottom p-3">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <div class="fw-600"><?= htmlspecialchars($inv["judul"]) ?></div>
+          <div class="fs-12 text-muted mt-1">
+            <span class="badge bg-secondary me-1"><?= $peranLabel[$inv["peran_acara"]] ?? $inv["peran_acara"] ?></span>
+            <?php if ($inv["bagian"]): ?><span class="text-muted"><?= htmlspecialchars($inv["bagian"]) ?></span><?php endif; ?>
+            · <?= date("d M Y", strtotime($inv["tanggal_mulai"])) ?>
+            <?php if ($inv["nama_pic"]): ?> · PIC: <?= htmlspecialchars($inv["nama_pic"]) ?><?php endif; ?>
+          </div>
+          <?php if ($sisaHariInv !== null): ?>
+          <div class="fs-12 mt-1 <?= $expiredInv ? "text-danger" : ($sisaHariInv <= 3 ? "text-warning fw-600" : "text-muted") ?>">
+            <i class="bi bi-clock me-1"></i>
+            <?php if ($expiredInv): ?>Link email kadaluarsa, konfirmasi langsung di sini
+            <?php else: ?>Token email berakhir dalam <?= $sisaHariInv ?> hari
+            <?php endif; ?>
+          </div>
+          <?php endif; ?>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0">
+          <form method="POST" action="<?= BASE_URL ?>/modules/panitia/konfirmasi_web.php" class="d-inline">
+            <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+            <input type="hidden" name="panitia_id" value="<?= $inv["id"] ?>">
+            <input type="hidden" name="jawab" value="bersedia">
+            <button type="submit" class="btn btn-success btn-sm">
+              <i class="bi bi-check-circle me-1"></i>Bersedia
+            </button>
+          </form>
+          <button type="button" class="btn btn-outline-danger btn-sm"
+            onclick="showTolakModal(<?= $inv["id"] ?>, <?= htmlspecialchars(json_encode($inv["judul"])) ?>)">
+            <i class="bi bi-x-circle me-1"></i>Tolak
+          </button>
+        </div>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- Stat Cards -->
 <div class="row g-3 mb-4">
@@ -156,7 +223,9 @@ $statusClass = ['draft'=>'status-draft','pengajuan'=>'status-pengajuan','disetuj
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <span><i class="bi bi-person-badge me-2"></i>PIC Acara</span>
+        <?php if (hasPermission('buat_acara')): ?>
         <a href="<?= BASE_URL ?>/modules/events/create.php" class="btn btn-sm btn-primary px-2 py-0">+</a>
+        <?php endif; ?>
       </div>
       <div class="card-body p-0">
         <?php if (empty($picList)): ?>
@@ -258,4 +327,38 @@ new Chart(document.getElementById("chartStatus"), {
 });
 </script>';
 ?>
+<!-- Modal Tolak Undangan -->
+<div class="modal fade" id="tolakModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-x-circle text-danger me-2"></i>Tolak Undangan</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="<?= BASE_URL ?>/modules/panitia/konfirmasi_web.php">
+        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+        <input type="hidden" name="panitia_id" id="tolakPanitiaId" value="">
+        <input type="hidden" name="jawab" value="tidak_bisa">
+        <div class="modal-body">
+          <p>Kamu akan menolak undangan untuk acara <strong id="tolakJudul"></strong>.</p>
+          <div class="mb-3">
+            <label class="form-label fw-600">Alasan tidak bisa hadir <span class="text-danger">*</span></label>
+            <textarea name="alasan" class="form-control" rows="3" placeholder="cth: Ada acara keluarga, sedang tugas luar kota, dll." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-danger">Konfirmasi Tolak</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function showTolakModal(panitiaId, judul) {
+  document.getElementById('tolakPanitiaId').value = panitiaId;
+  document.getElementById('tolakJudul').textContent = judul;
+  new bootstrap.Modal(document.getElementById('tolakModal')).show();
+}
+</script>
 <?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>

@@ -269,6 +269,7 @@ $jabatanSistemLabel = [
                 </button>
                 <?php if ($u['id'] != 1): ?>
                 <form method="POST" style="display:inline">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
                   <input type="hidden" name="delete" value="<?= $u['id'] ?>">
                   <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus SDM"
                           data-confirm="Hapus SDM ini? Tindakan tidak bisa dibatalkan.">
@@ -295,6 +296,7 @@ $jabatanSistemLabel = [
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
         <input type="hidden" name="target_id" id="editTargetId">
         <div class="modal-body">
           <div class="alert alert-info fs-13 mb-3">
@@ -401,6 +403,7 @@ $jabatanSistemLabel = [
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
         <input type="hidden" name="bulk_action" value="1">
         <input type="hidden" name="bulk_action_type" value="divisi">
         <div id="bulkUserIdsContainer"></div>
@@ -437,6 +440,7 @@ $jabatanSistemLabel = [
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
         <div class="modal-body">
           <div class="row g-3">
             <div class="col-md-6">

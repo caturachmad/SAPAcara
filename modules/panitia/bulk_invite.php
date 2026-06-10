@@ -144,6 +144,7 @@ foreach ($sdmList as $s) {
 <?php endif; ?>
 
 <form method="POST" id="bulkForm">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
 <div class="row g-3">
 
   <!-- Panel Pengaturan -->

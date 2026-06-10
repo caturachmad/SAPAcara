@@ -54,8 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . BASE_URL . '/modules/dashboard/select.php');
                 exit;
             }
+        } else {
+            $error = 'Email atau password salah.';
         }
-        $error = 'Email atau password salah.';
     }
 }
 ?>

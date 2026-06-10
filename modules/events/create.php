@@ -2,6 +2,13 @@
 $pageTitle = 'Buat Acara Baru';
 require_once __DIR__ . '/../../includes/layout/header.php';
 
+// Guard: hanya user dengan permission 'buat_acara' yang boleh akses
+if (!hasPermission('buat_acara')) {
+    setFlash('Anda tidak memiliki izin untuk membuat acara.', 'danger');
+    header('Location: ' . BASE_URL . '/modules/dashboard/select.php');
+    exit;
+}
+
 // Ambil daftar SDM aktif untuk dropdown kepanitiaan inti
 $semuaSDM = $pdo->query("SELECT id, nama, divisi, jabatan, jabatan_sistem FROM users WHERE status='aktif' ORDER BY nama")->fetchAll();
 
@@ -91,13 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // 4. Approval manager dibuat setelah proposal diajukan dari workspace
-            //    agar manager dapat melihat dokumen proposal yang lengkap terlebih dahulu.
+            // 4. Tidak membuat approval manager saat acara dibuat.
+            //    Approval manager akan dibuat saat PIC mengajukan proposal/rab dari halaman acara.
 
             $pdo->commit();
 
-            setFlash("Acara \"{$judul}\" berhasil dibuat! Silakan lengkapi detail acara.", 'success');
-            header('Location: ' . BASE_URL . '/modules/events/detail.php?id=' . $eventId);
+            setFlash("Acara \"{$judul}\" berhasil dibuat! Ikuti langkah-langkah persiapan di bawah.", 'success');
+            header('Location: ' . BASE_URL . '/modules/events/workspace.php?id=' . $eventId . '&onboarding=1');
             exit;
 
         } catch (Exception $e) {
@@ -129,6 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="row g-3">
   <div class="col-lg-8">
     <form method="POST" class="form-section">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
 
       <!-- Nama Acara -->
       <div class="mb-3">

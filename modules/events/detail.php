@@ -17,7 +17,7 @@ if (!$ev) { header('Location: ' . BASE_URL . '/modules/events/'); exit; }
 
 $canManage = isSuperAdmin() || isPIC($id, $pdo) || isEventAdmin($id, $pdo);
 
-$hasProposalDocsQ = $pdo->prepare("SELECT COUNT(*) FROM event_files WHERE event_id=? AND file_type IN ('proposal','rundown','jobdesk','undangan','rab')");
+$hasProposalDocsQ = $pdo->prepare("SELECT COUNT(*) FROM event_files WHERE event_id=? AND file_type IN ('proposal','rab')");
 $hasProposalDocsQ->execute([$id]);
 $proposalDocsCount = (int)$hasProposalDocsQ->fetchColumn();
 
@@ -99,6 +99,12 @@ $statusLabel = [
     'selesai'           => 'Selesai',        'ditolak'           => 'Ditolak',
 ];
 $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'Panitia Support'];
+$levelApproverLabel = ['TK'=>'Manager TK','SD'=>'Manager SD','SMP'=>'Manager SMP','Umum'=>'Kepala Sekolah'];
+$nextApprover = $levelApproverLabel[$ev['level']] ?? 'Kepala Sekolah';
+$panitiaCount = count($daftarPanitia);
+$hasCorePanitia = $panitiaCount > 1;
+$canUploadFiles = $canManage;
+$canSubmitToManager = $ev['status'] === 'draft' && $proposalDocsCount > 0 && !$hasPendingManagerApproval;
 ?>
 
 <div class="d-flex align-items-center gap-2 mb-3">
@@ -109,13 +115,58 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
   <span class="badge-status status-<?= $ev['status'] ?>"><?= $statusLabel[$ev['status']] ?? $ev['status'] ?></span>
   <?php if (isPIC($id, $pdo) && $ev['status'] === 'draft' && !$hasPendingManagerApproval): ?>
     <form method="POST" class="ms-3">
-      <button type="submit" name="submit_to_manager" value="1" class="btn btn-sm btn-warning">
-        <i class="bi bi-send-plus me-1"></i> Ajukan ke Manager
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+      <button type="submit" name="submit_to_manager" value="1" class="btn btn-sm btn-warning" <?= $proposalDocsCount === 0 ? 'disabled' : '' ?>>
+        <i class="bi bi-send-plus me-1"></i> Ajukan ke <?= htmlspecialchars($nextApprover) ?>
       </button>
     </form>
   <?php elseif (isPIC($id, $pdo) && $ev['status'] === 'draft' && $hasPendingManagerApproval): ?>
-    <span class="badge bg-info text-dark ms-3">Pengajuan ke manager sedang menunggu keputusan</span>
+    <span class="badge bg-info text-dark ms-3">Pengajuan ke <?= htmlspecialchars($nextApprover) ?> sedang menunggu keputusan</span>
   <?php endif; ?>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-list-task me-2"></i>Langkah Sebelum Acara Dirilis</div>
+  <div class="card-body">
+    <div class="list-group list-group-flush">
+      <div class="list-group-item d-flex justify-content-between align-items-start">
+        <div>
+          <div class="fw-600">Upload Proposal / RAB</div>
+          <div class="text-muted fs-12">Unggah minimal satu dokumen untuk mengajukan ke <?= htmlspecialchars($nextApprover) ?>.</div>
+        </div>
+        <span class="badge bg-<?= $proposalDocsCount > 0 ? 'success' : 'secondary' ?>"><?= $proposalDocsCount > 0 ? 'Selesai' : 'Menunggu' ?></span>
+      </div>
+      <div class="list-group-item d-flex justify-content-between align-items-start">
+        <div>
+          <div class="fw-600">Ajukan ke <?= htmlspecialchars($nextApprover) ?></div>
+          <div class="text-muted fs-12"><?= $proposalDocsCount > 0 ? 'Setelah dokumen tersedia, ajukan ke manager.' : 'Ajukan setelah mengunggah dokumen proposal atau RAB.' ?></div>
+        </div>
+        <span class="badge bg-<?= $ev['status'] !== 'draft' ? 'success' : 'secondary' ?>"><?= $ev['status'] !== 'draft' ? 'Selesai' : 'Menunggu' ?></span>
+      </div>
+      <div class="list-group-item d-flex justify-content-between align-items-start">
+        <div>
+          <div class="fw-600">Undang Panitia</div>
+          <div class="text-muted fs-12">Undang anggota panitia setelah manager menyetujui proposal.</div>
+        </div>
+        <span class="badge bg-<?= $hasCorePanitia ? 'success' : 'secondary' ?>"><?= $hasCorePanitia ? 'Ada Panitia' : 'Perlu Undang' ?></span>
+      </div>
+      <div class="list-group-item d-flex justify-content-between align-items-start">
+        <div>
+          <div class="fw-600">Atur Link WA & Dokumentasi</div>
+          <div class="text-muted fs-12">Tambahkan link grup WA dan dokumentasi sebagai pusat komunikasi.</div>
+        </div>
+        <span class="badge bg-<?= (!empty($ev['wa_group_link']) && !empty($ev['link_dokumentasi'])) ? 'success' : 'secondary' ?>"><?= (!empty($ev['wa_group_link']) && !empty($ev['link_dokumentasi'])) ? 'Siap' : 'Perlu Lengkapi' ?></span>
+      </div>
+    </div>
+    <?php if ($canManage): ?>
+    <div class="mt-3 d-flex flex-wrap gap-2">
+      <a href="<?= BASE_URL ?>/modules/files/upload.php?event_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">Upload Dokumen</a>
+      <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= $id ?>#approval" class="btn btn-sm btn-outline-secondary">Buka Approval</a>
+      <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= $id ?>#tim" class="btn btn-sm btn-outline-secondary">Buka Tim & Panitia</a>
+      <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= $id ?>#overview" class="btn btn-sm btn-outline-secondary">Lihat Progress</a>
+    </div>
+    <?php endif; ?>
+  </div>
 </div>
 
 <div class="row g-3">

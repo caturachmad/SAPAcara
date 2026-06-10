@@ -65,12 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  /* ── 5. Confirm sebelum aksi ── */
-  document.querySelectorAll('[data-confirm]').forEach(el => {
-    el.addEventListener('click', e => { if (!confirm(el.dataset.confirm)) e.preventDefault(); });
-  });
-
-  /* ── 6. Tab aktif dari URL hash ── */
+  /* ── 5. Tab aktif dari URL hash ── */
   const hash = window.location.hash;
   if (hash) {
     const tabTrigger = document.querySelector(`[data-bs-target="${hash}"]`);
