@@ -30,6 +30,7 @@ $notifColor = ['info'=>'#0ea5e9','success'=>'#10b981','warning'=>'#f59e0b','dang
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="<?= csrfToken() ?>">
 <title><?= htmlspecialchars($pageTitle) ?> — SAPAcara</title>
 <link href="<?= BASE_URL ?>/assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <link href="<?= BASE_URL ?>/assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
@@ -64,7 +65,7 @@ $notifColor = ['info'=>'#0ea5e9','success'=>'#10b981','warning'=>'#f59e0b','dang
           <span class="fw-700 fs-13">Notifikasi</span>
           <div class="d-flex gap-2 align-items-center">
             <?php if ($unreadNotif > 0): ?>
-              <a href="<?= BASE_URL ?>/modules/notifications/read_all.php" class="fs-12 text-primary" style="white-space:nowrap">Tandai dibaca</a>
+            <form method="POST" action="<?= BASE_URL ?>/modules/notifications/read_all.php" style="display:inline"><button type="submit" class="btn btn-link fs-12 text-primary p-0" style="white-space:nowrap">Tandai dibaca</button></form>
             <?php endif; ?>
             <button onclick="document.getElementById('notifPanel').classList.remove('open')" class="btn-close" style="font-size:.7rem"></button>
           </div>

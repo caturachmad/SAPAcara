@@ -76,9 +76,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tambah_user'])) {
     header('Location: ?'); exit;
 }
 
-// ── Handle delete user ──
-if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
-    $tid = (int)$_GET['delete'];
+// ── Handle delete user (POST only) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete']) && is_numeric($_POST['delete'])) {
+    $tid = (int)$_POST['delete'];
     if ($tid !== 1) {
         $pdo->prepare("DELETE FROM event_panitia WHERE user_id=?")->execute([$tid]);
         $pdo->prepare("DELETE FROM notifications WHERE user_id=?")->execute([$tid]);
@@ -268,12 +268,13 @@ $jabatanSistemLabel = [
                   <i class="bi bi-pencil-square"></i>
                 </button>
                 <?php if ($u['id'] != 1): ?>
-                <a href="?delete=<?= $u['id'] ?>"
-                   class="btn btn-sm btn-outline-danger"
-                   data-confirm="Hapus SDM ini?"
-                   title="Hapus SDM">
-                  <i class="bi bi-trash"></i>
-                </a>
+                <form method="POST" style="display:inline">
+                  <input type="hidden" name="delete" value="<?= $u['id'] ?>">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus SDM"
+                          data-confirm="Hapus SDM ini? Tindakan tidak bisa dibatalkan.">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
                 <?php endif; ?>
               </div>
             </td>
@@ -584,7 +585,7 @@ bulkEditBtn?.addEventListener('click', function () {
 bulkDeactivateBtn?.addEventListener('click', function () {
   const ids = getSelectedUserIds();
   if (!ids.length) return;
-  if (!confirm('Hapus semua SDM terpilih?')) return;
+  showConfirmModal('Hapus semua SDM terpilih?', function() {
   const form = document.createElement('form');
   form.method = 'POST';
   form.style.display = 'none';
@@ -593,6 +594,7 @@ bulkDeactivateBtn?.addEventListener('click', function () {
     ids.map(id => `<input type="hidden" name="bulk_user_ids[]" value="${id}">`).join('');
   document.body.appendChild(form);
   form.submit();
+  });
 });
 
 </script>

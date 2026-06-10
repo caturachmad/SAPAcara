@@ -105,14 +105,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['simpan'])) {
         </button>
       </div>
       <div class="card-body" id="pertanyaanContainer">
+        <div class="alert alert-info mb-3">
+          Form evaluasi ini sudah otomatis mencakup SWOT (Strength, Weakness, Opportunity, Threat) dan Saran.
+        </div>
         <!-- Template pertanyaan awal -->
         <?php
         $tipeOptions = ['textarea'=>'Jawaban Panjang','text'=>'Jawaban Singkat','rating'=>'Rating (1-10)','pilihan_ganda'=>'Pilihan Ganda','ya_tidak'=>'Ya / Tidak'];
         $defaultQ = [
-          ['Bagaimana penilaian kamu secara keseluruhan terhadap acara ini?','rating'],
-          ['Apa yang berjalan dengan baik dalam acara ini?','textarea'],
-          ['Apa yang perlu diperbaiki untuk acara berikutnya?','textarea'],
-          ['Apakah koordinasi antar panitia berjalan lancar?','ya_tidak'],
+          ['Strength: Apa yang berjalan baik dalam acara ini?','textarea'],
+          ['Weakness: Apa yang perlu diperbaiki untuk acara berikutnya?','textarea'],
+          ['Opportunity: Peluang apa yang bisa dikembangkan dari acara ini?','textarea'],
+          ['Threat: Risiko atau kendala apa yang perlu diwaspadai?','textarea'],
           ['Saran tambahan untuk penyelenggara?','textarea'],
         ];
         foreach ($defaultQ as $qi => $q): ?>

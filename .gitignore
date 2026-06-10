@@ -5,4 +5,5 @@ uploads/rab/
 uploads/perijinan/
 *.log
 .env
+config/db.php
 config/mail.php

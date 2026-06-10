@@ -2,13 +2,24 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
 if (session_status()===PHP_SESSION_NONE) session_start();
-requireLogin();
+requireLogin(); // includes CSRF verify for POST
 
-$id      = (int)($_GET['id'] ?? 0);
-$eventId = (int)($_GET['event_id'] ?? 0);
+
+function redirectBack(string $fallback): void {
+    $ref  = $_SERVER['HTTP_REFERER'] ?? '';
+    $safe = str_starts_with($ref, BASE_URL) ? $ref : $fallback;
+    header('Location: ' . $safe);
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    die('Method Not Allowed');
+}
+
+$id      = (int)($_POST['id'] ?? 0);
+$eventId = (int)($_POST['event_id'] ?? 0);
 
 if ($id && $eventId && (isPIC($eventId,$pdo) || isEventAdmin($eventId,$pdo) || isSuperAdmin())) {
-    // Jangan hapus PIC
     $cek = $pdo->prepare("SELECT peran_acara FROM event_panitia WHERE id=? AND event_id=?");
     $cek->execute([$id,$eventId]); $p = $cek->fetch();
     if ($p && $p['peran_acara']!=='pic') {
@@ -18,5 +29,4 @@ if ($id && $eventId && (isPIC($eventId,$pdo) || isEventAdmin($eventId,$pdo) || i
         setFlash('PIC tidak bisa dikeluarkan.','danger');
     }
 }
-header('Location: ' . BASE_URL . '/modules/events/workspace.php?id=' . $eventId . '#tim');
-exit;
+redirectBack(BASE_URL . '/modules/events/workspace.php?id=' . $eventId . '#tim');

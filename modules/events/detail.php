@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_to_manager']) 
     } elseif ($hasPendingManagerApproval) {
         setFlash('Sudah ada pengajuan kepala sekolah yang menunggu keputusan.', 'info');
     } else {
-        $levelToTipe = ['TK' => 'manager_tk', 'SD' => 'manager_sd', 'SMP' => 'manager_smp'];
+        $levelToTipe = ['TK' => 'manager_tk', 'SD' => 'manager_sd', 'SMP' => 'manager_smp', 'Umum' => 'kepala_sekolah'];
         $tipeManager = $levelToTipe[$ev['level']] ?? null;
         if (!$tipeManager) {
             setFlash('Level acara tidak sesuai untuk pengajuan kepala sekolah. Hubungi admin.', 'warning');
@@ -110,11 +110,11 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
   <?php if (isPIC($id, $pdo) && $ev['status'] === 'draft' && !$hasPendingManagerApproval): ?>
     <form method="POST" class="ms-3">
       <button type="submit" name="submit_to_manager" value="1" class="btn btn-sm btn-warning">
-        <i class="bi bi-send-plus me-1"></i> Ajukan ke Kepala Sekolah
+        <i class="bi bi-send-plus me-1"></i> Ajukan ke Manager
       </button>
     </form>
   <?php elseif (isPIC($id, $pdo) && $ev['status'] === 'draft' && $hasPendingManagerApproval): ?>
-    <span class="badge bg-info text-dark ms-3">Pengajuan kepala sekolah sedang menunggu keputusan</span>
+    <span class="badge bg-info text-dark ms-3">Pengajuan ke manager sedang menunggu keputusan</span>
   <?php endif; ?>
 </div>
 
@@ -152,7 +152,7 @@ $peranLabel = ['pic'=>'PIC','panitia_inti'=>'Panitia Inti','panitia_support'=>'P
       <?php endif; ?>
       <?php if (isPIC($id, $pdo) && $ev['status'] === 'draft'): ?>
       <div class="alert alert-info mt-3 mb-0 small">
-        Upload proposal, rundown, daftar kepanitiaan, dan dokumen pendukung di halaman dokumen sebelum mengajukan ke kepala sekolah.
+        Upload proposal, rundown, daftar kepanitiaan, dan dokumen pendukung di halaman dokumen sebelum mengajukan ke manager.
       </div>
       <?php endif; ?>
     </div>

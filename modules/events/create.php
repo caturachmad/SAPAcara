@@ -56,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pic->execute([$eventId, $_SESSION['user_id']]);
 
             // 3. Daftarkan kepanitiaan inti jika disediakan (bendahara, sekretaris, kehumasan)
+            // Jika user sudah terdaftar sebagai PIC, biarkan dia menjadi PIC sekaligus memiliki bagian tambahan.
             $coreRoles = [
               'bendahara' => 'Bendahara Acara',
               'sekretaris' => 'Sekretaris Acara',
@@ -64,7 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($coreRoles as $field => $label) {
               $uid = isset($_POST[$field]) && is_numeric($_POST[$field]) ? (int)$_POST[$field] : 0;
               if ($uid) {
-                $insCore = $pdo->prepare("INSERT INTO event_panitia (event_id,user_id,peran_acara,bagian,status_konfirmasi) VALUES (?,?,?,?,?)");
+                $insCore = $pdo->prepare(
+                    "INSERT INTO event_panitia (event_id,user_id,peran_acara,bagian,status_konfirmasi) VALUES (?,?,?,?,?) " .
+                    "ON DUPLICATE KEY UPDATE " .
+                    "bagian=VALUES(bagian), status_konfirmasi=VALUES(status_konfirmasi), is_double_job=1, " .
+                    "peran_acara = IF(peran_acara='pic', peran_acara, VALUES(peran_acara))"
+                );
                 $insCore->execute([$eventId, $uid, 'panitia_inti', $label, 'bersedia']);
               }
             }
@@ -175,6 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <!-- Kepanitiaan Inti -->
       <div class="mb-3">
         <label class="form-label">Kepanitiaan Inti (opsional)</label>
+        <div class="form-text mb-2">Bisa memilih PIC yang sama sebagai Sekretaris jika ingin double job.</div>
         <div class="row g-2">
           <div class="col-md-4">
             <label class="form-label">Bendahara Acara</label>

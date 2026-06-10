@@ -2,10 +2,22 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
 if (session_status()===PHP_SESSION_NONE) session_start();
-requireLogin();
+requireLogin(); // includes CSRF verify for POST
 
-$id      = (int)($_GET['id'] ?? 0);
-$eventId = (int)($_GET['event_id'] ?? 0);
+
+function redirectBack(string $fallback): void {
+    $ref  = $_SERVER['HTTP_REFERER'] ?? '';
+    $safe = str_starts_with($ref, BASE_URL) ? $ref : $fallback;
+    header('Location: ' . $safe);
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    die('Method Not Allowed');
+}
+
+$id      = (int)($_POST['id'] ?? 0);
+$eventId = (int)($_POST['event_id'] ?? 0);
 $stmt    = $pdo->prepare("SELECT * FROM event_files WHERE id=? AND event_id=?");
 $stmt->execute([$id, $eventId]); $file = $stmt->fetch();
 
@@ -15,5 +27,4 @@ if ($file && (isSuperAdmin() || isPIC($eventId,$pdo) || isEventAdmin($eventId,$p
     $pdo->prepare("DELETE FROM event_files WHERE id=?")->execute([$id]);
     setFlash('File berhasil dihapus.', 'success');
 }
-header('Location: ' . BASE_URL . '/modules/events/workspace.php?id=' . $eventId . '#dokumen');
-exit;
+redirectBack(BASE_URL . '/modules/events/workspace.php?id=' . $eventId . '#dokumen');

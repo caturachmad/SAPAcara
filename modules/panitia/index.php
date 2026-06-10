@@ -169,7 +169,9 @@ $peranColor = ['pic'=>'bg-primary','panitia_inti'=>'bg-secondary','panitia_suppo
             </td>
             <td>
               <span class="badge <?= $p['peran_acara'] === 'pic' ? 'bg-primary' : 'bg-secondary' ?>">
-                <?= $p['peran_acara'] === 'pic' ? 'PIC' : ($p['bagian'] ? htmlspecialchars($p['bagian']) : 'Panitia') ?>
+                <?= $p['peran_acara'] === 'pic'
+                    ? 'PIC' . ($p['bagian'] ? ' + ' . htmlspecialchars($p['bagian']) : '')
+                    : ($p['bagian'] ? htmlspecialchars($p['bagian']) : 'Panitia') ?>
               </span>
               <?php if ($p['is_event_admin']): ?>
                 <span class="badge bg-warning text-dark ms-1" title="Event Admin"><i class="bi bi-star-fill"></i></span>

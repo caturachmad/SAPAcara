@@ -12,6 +12,27 @@ function requireLogin(): void {
         header('Location: ' . BASE_URL . '/modules/auth/login.php');
         exit;
     }
+    // CSRF check otomatis untuk semua POST di halaman yang butuh login
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrfVerify();
+    }
+}
+
+// ── CSRF Protection ───────────────────────────────────────────────────────────
+
+function csrfToken(): string {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrfVerify(): void {
+    $token = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $token)) {
+        http_response_code(403);
+        die('Akses ditolak: CSRF token tidak valid.');
+    }
 }
 
 function currentUser(): array {

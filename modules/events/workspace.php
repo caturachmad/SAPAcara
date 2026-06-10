@@ -134,7 +134,7 @@ function topKeywords(array $rows, string $field, int $top = 5): array {
 // ── POST: update status ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_status']) && $isPic) {
     $ns = $_POST['new_status'];
-    if (in_array($ns,['berlangsung','selesai','ditolak'])) {
+    if (in_array($ns,['selesai','ditolak'], true)) {
         $pdo->prepare("UPDATE events SET status=? WHERE id=?")->execute([$ns,$id]);
         // SWOT notification dikirim manual oleh PIC via tombol "Kirim SWOT", bukan otomatis
     }
@@ -147,6 +147,60 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['toggle_check'])) {
     $cid = (int)$_POST['check_id']; $done = (int)$_POST['is_done'];
     $pdo->prepare("UPDATE event_checklist SET is_done=?,done_by=?,done_at=? WHERE id=? AND event_id=?")
         ->execute([$done,$_SESSION['user_id'],$done?date('Y-m-d H:i:s'):null,$cid,$id]);
+    header("Location: ?id=$id#checklist"); exit;
+}
+
+// ── POST: add todo ────────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_todo']) && $isEventAdmin) {
+    $item     = trim($_POST['todo_nama'] ?? '');
+    $deadline = trim($_POST['todo_deadline'] ?? '') ?: null;
+    $pj       = trim($_POST['todo_pj'] ?? '') ?: null;
+    $status   = in_array($_POST['todo_status'] ?? '', ['belum','on_progres','selesai']) ? $_POST['todo_status'] : 'belum';
+    if ($item !== '') {
+        $isDone = ($status === 'selesai') ? 1 : 0;
+        $doneAt = $isDone ? date('Y-m-d H:i:s') : null;
+        $doneBy = $isDone ? $_SESSION['user_id'] : null;
+        $maxUrut = $pdo->prepare("SELECT COALESCE(MAX(urutan),0)+1 FROM event_checklist WHERE event_id=?");
+        $maxUrut->execute([$id]); $urutan = (int)$maxUrut->fetchColumn();
+        $pdo->prepare("INSERT INTO event_checklist (event_id, item, deadline, pj, status, urutan, is_done, done_by, done_at) VALUES (?,?,?,?,?,?,?,?,?)")
+            ->execute([$id, $item, $deadline, $pj, $status, $urutan, $isDone, $doneBy, $doneAt]);
+    }
+    header("Location: ?id=$id#checklist"); exit;
+}
+
+// ── POST: update todo status ──────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_todo_status']) && $isEventAdmin) {
+    $cid    = (int)$_POST['check_id'];
+    $status = in_array($_POST['todo_status'] ?? '', ['belum','on_progres','selesai']) ? $_POST['todo_status'] : 'belum';
+    $isDone = ($status === 'selesai') ? 1 : 0;
+    $doneAt = $isDone ? date('Y-m-d H:i:s') : null;
+    $doneBy = $isDone ? $_SESSION['user_id'] : null;
+    $pdo->prepare("UPDATE event_checklist SET status=?, is_done=?, done_by=?, done_at=? WHERE id=? AND event_id=?")
+        ->execute([$status, $isDone, $doneBy, $doneAt, $cid, $id]);
+    header("Location: ?id=$id#checklist"); exit;
+}
+
+// ── POST: delete todo ─────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['delete_todo']) && $isEventAdmin) {
+    $cid = (int)$_POST['check_id'];
+    $pdo->prepare("DELETE FROM event_checklist WHERE id=? AND event_id=?")->execute([$cid, $id]);
+    header("Location: ?id=$id#checklist"); exit;
+}
+
+// ── POST: edit todo ───────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['edit_todo']) && $isEventAdmin) {
+    $cid      = (int)$_POST['check_id'];
+    $item     = trim($_POST['todo_nama'] ?? '');
+    $deadline = trim($_POST['todo_deadline'] ?? '') ?: null;
+    $pj       = trim($_POST['todo_pj'] ?? '') ?: null;
+    $status   = in_array($_POST['todo_status'] ?? '', ['belum','on_progres','selesai']) ? $_POST['todo_status'] : 'belum';
+    if ($item !== '') {
+        $isDone = ($status === 'selesai') ? 1 : 0;
+        $doneAt = $isDone ? date('Y-m-d H:i:s') : null;
+        $doneBy = $isDone ? $_SESSION['user_id'] : null;
+        $pdo->prepare("UPDATE event_checklist SET item=?, deadline=?, pj=?, status=?, is_done=?, done_by=?, done_at=? WHERE id=? AND event_id=?")
+            ->execute([$item, $deadline, $pj, $status, $isDone, $doneBy, $doneAt, $cid, $id]);
+    }
     header("Location: ?id=$id#checklist"); exit;
 }
 
@@ -164,6 +218,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_doc']) && $isPic) 
     header("Location: ?id=$id"); exit;
 }
 
+// ── POST: hapus evaluasi (PIC) ──────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['delete_evaluation']) && $isPic) {
+    $evalId = (int)($_POST['evaluation_id'] ?? 0);
+    $check = $pdo->prepare("SELECT event_id FROM event_evaluasi WHERE id=?");
+    $check->execute([$evalId]);
+    $row = $check->fetch();
+    if ($row && $row['event_id'] === $id) {
+        $pdo->prepare("DELETE FROM evaluasi_jawaban WHERE evaluasi_id=?")->execute([$evalId]);
+        $pdo->prepare("DELETE FROM event_evaluasi WHERE id=?")->execute([$evalId]);
+        setFlash('Evaluasi berhasil dihapus.', 'success');
+    }
+    header("Location: ?id=$id#evaluasi"); exit;
+}
+
 // ── POST: tambah custom SWOT question (PIC, sebelum dikirim) ─────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_swot_q']) && $isPic && !$swotSentAt) {
     $pertanyaan = trim($_POST['pertanyaan'] ?? '');
@@ -172,14 +240,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_swot_q']) && $isPic
         $pdo->prepare("INSERT INTO event_swot_questions (event_id, pertanyaan, urutan) VALUES (?,?,?)")
             ->execute([$id, $pertanyaan, $nextUrutan]);
     }
-    header("Location: ?id=$id#swot"); exit;
+    header("Location: ?id=$id#evaluasi"); exit;
 }
 
 // ── POST: hapus custom SWOT question (PIC, sebelum dikirim) ──────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['del_swot_q']) && $isPic && !$swotSentAt) {
     $qid = (int)$_POST['question_id'];
     $pdo->prepare("DELETE FROM event_swot_questions WHERE id=? AND event_id=?")->execute([$qid, $id]);
-    header("Location: ?id=$id#swot"); exit;
+    header("Location: ?id=$id#evaluasi"); exit;
 }
 
 // ── POST: kirim SWOT ke panitia (PIC) ────────────────────────────────────────
@@ -187,14 +255,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['send_swot']) && $isPic 
     $pdo->prepare("UPDATE events SET swot_sent_at=NOW() WHERE id=?")->execute([$id]);
     foreach ($panitia as $p) {
         addNotif($pdo, $p['user_id'],
-            '📋 Evaluasi SWOT — ' . $ev['judul'],
-            'PIC telah membuka form evaluasi SWOT. Mohon isi secepatnya.',
+            '📋 Evaluasi Acara — ' . $ev['judul'],
+            'PIC telah membuka form evaluasi acara ini. Mohon isi secepatnya.',
             BASE_URL . '/modules/events/workspace.php?id=' . $id,
             'info'
         );
     }
-    setFlash('Form SWOT berhasil dikirim ke ' . count($panitia) . ' panitia.', 'success');
-    header("Location: ?id=$id#swot"); exit;
+    setFlash('Form evaluasi berhasil dikirim ke ' . count($panitia) . ' panitia.', 'success');
+    header("Location: ?id=$id#evaluasi"); exit;
 }
 
 // ── POST: submit SWOT (panitia isi form) ─────────────────────────────────────
@@ -219,8 +287,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['submit_swot']) && $swot
         $pdo->prepare("INSERT INTO event_swot_answers (swot_id, question_id, jawaban) VALUES (?,?,?)")
             ->execute([$newSwotId, $sq['id'], $jawaban]);
     }
-    setFlash('Evaluasi SWOT berhasil dikirim. Terima kasih!', 'success');
-    header("Location: ?id=$id#swot"); exit;
+    setFlash('Evaluasi berhasil dikirim. Terima kasih!', 'success');
+    header("Location: ?id=$id#evaluasi"); exit;
 }
 
 // ── Label helpers ─────────────────────────────────────────────────────────────
@@ -239,7 +307,6 @@ $workflowStep = [
   'selesai' => 'Acara selesai. Lakukan evaluasi dan tutup acara.',
   'ditolak' => 'Acara ditolak. Revisi dokumen atau approval kemudian ajukan kembali.',
 ];
-$workflowHint = $workflowStep[$ev['status']] ?? '';
 $fileTypeLabel = ['rab'=>'RAB','rundown'=>'Rundown','proposal'=>'Proposal','perijinan'=>'Perijinan',
   'jobdesk'=>'Jobdesk','undangan'=>'Undangan','lainnya'=>'Lainnya'];
 $fileTypeIcon  = ['rab'=>'cash-stack','rundown'=>'list-task','proposal'=>'file-text','perijinan'=>'shield-check',
@@ -263,6 +330,12 @@ if ($pendingCount > 0) {
 }
 
 $sisaHari = (int)ceil((strtotime($ev['tanggal_mulai']) - time()) / 86400);
+$hasStarted = time() >= strtotime($ev['tanggal_mulai']);
+$displayStatus = $ev['status'];
+if ($ev['status'] === 'disetujui' && $hasStarted) {
+    $displayStatus = 'berlangsung';
+}
+$workflowHint = $workflowStep[$displayStatus] ?? '';
 
 require_once __DIR__ . '/../../includes/layout/header.php';
 ?>
@@ -296,9 +369,9 @@ require_once __DIR__ . '/../../includes/layout/header.php';
         </div>
       </div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <span class="badge fs-12 py-2 px-3 <?= match($ev['status']) {
+        <span class="badge fs-12 py-2 px-3 <?= match($displayStatus) {
           'berlangsung'=>'bg-warning text-dark','selesai'=>'bg-success','ditolak'=>'bg-danger',default=>'bg-light text-dark'
-        } ?>"><?= $statusLabel[$ev['status']] ?></span>
+        } ?>"><?= $statusLabel[$displayStatus] ?></span>
         <?php if ($sisaHari >= 0 && $ev['status']!=='selesai'): ?>
           <span class="badge fs-12 py-2 px-3 <?= $sisaHari<=3?'bg-danger':($sisaHari<=7?'bg-warning text-dark':'bg-primary') ?>">
             <?= $sisaHari===0?'Hari ini!':"$sisaHari hari lagi" ?>
@@ -308,13 +381,17 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <div class="dropdown">
             <button class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown">Update Status</button>
             <ul class="dropdown-menu">
-              <?php if ($ev['status']==='disetujui'): ?><li><button type="button" class="dropdown-item" onclick="submitStatus('berlangsung')">✏️ Tandai Berlangsung</button></li><?php endif; ?>
-              <?php if ($ev['status']==='berlangsung'): ?><li><button type="button" class="dropdown-item text-success" onclick="submitStatus('selesai')" data-confirm="Tandai acara ini selesai?">🏁 Tandai Selesai</button></li><?php endif; ?>
+              <li>
+                <button type="button" class="dropdown-item text-success" onclick="submitStatusConfirm('selesai', 'Selesaikan acara ini? Status tidak bisa dikembalikan.')">
+                  🏁 Selesaikan Acara
+                </button>
+              </li>
             </ul>
           </div>
           <form method="POST" id="statusForm" class="d-none">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
             <input type="hidden" name="new_status" id="statusInput">
-            <button name="update_status" type="submit" class="d-none"></button>
+            <button name="update_status" type="submit" id="statusSubmitBtn" class="d-none"></button>
           </form>
         <?php endif; ?>
       </div>
@@ -333,19 +410,9 @@ require_once __DIR__ . '/../../includes/layout/header.php';
   <?php if ($isPic): ?>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#approval"><i class="bi bi-check2-circle me-1"></i>Approval</a></li>
   <?php endif; ?>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#evaluasi"><i class="bi bi-clipboard-check me-1"></i>Evaluasi</a></li>
   <?php if ($ev['status']==='selesai'): ?>
-    <li class="nav-item">
-      <a class="nav-link" data-bs-toggle="tab" href="#swot">
-        <i class="bi bi-bar-chart-line me-1"></i>Evaluasi SWOT
-        <?php if (!$swotSentAt && $isPic): ?>
-          <span class="badge bg-warning text-dark ms-1">Belum dikirim</span>
-        <?php elseif ($swotSentAt && !$sudahSwot && !$isPic): ?>
-          <span class="badge bg-danger ms-1">Belum isi</span>
-        <?php elseif ($swotSentAt && $sudahSwot && !$isPic): ?>
-          <span class="badge bg-success ms-1"><i class="bi bi-check"></i></span>
-        <?php endif; ?>
-      </a>
-    </li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#swot"><i class="bi bi-grid-3x3-gap me-1"></i>SWOT</a></li>
   <?php endif; ?>
 </ul>
 
@@ -353,6 +420,92 @@ require_once __DIR__ . '/../../includes/layout/header.php';
 
 <!-- ── TAB: OVERVIEW ── -->
 <div class="tab-pane fade show active" id="overview">
+
+<?php
+// ── Progress Wizard (hanya untuk PIC, selama event belum selesai) ────────────
+if ($isPic && !in_array($ev['status'], ['selesai','ditolak'])):
+  // Cek kondisi setiap step
+  $levelApproverLabel = ['TK'=>'Manager TK','SD'=>'Manager SD','SMP'=>'Manager SMP','Umum'=>'Kepala Sekolah'];
+  $hasProposalDoc = count(array_filter($files, fn($f) => in_array($f['file_type'],['proposal','rab']))) > 0;
+  $hasApproval    = count($approvals) > 0;
+  $approvedByMgr  = in_array($ev['status'], ['disetujui_manager','proposal_dibuat','rab_diajukan','perijinan','disetujui','berlangsung']);
+  $hasPanitia     = count($panitia) > 1; // lebih dari PIC sendiri
+  $hasWA          = !empty($ev['wa_group_link']);
+  $hasDoc         = !empty($ev['link_dokumentasi']);
+  $isFullyApproved = $ev['status'] === 'disetujui' || $displayStatus === 'berlangsung';
+
+  $steps = [
+    ['icon'=>'file-earmark-text','label'=>'Upload Proposal/RAB','desc'=>'Upload minimal satu dokumen proposal atau RAB','done'=>$hasProposalDoc,'tab'=>'dokumen','action'=>'Upload Dokumen','action_url'=>BASE_URL.'/modules/files/upload.php?event_id='.$id],
+    ['icon'=>'send','label'=>'Ajukan ke '.($levelApproverLabel[$ev['level']]??'Manager'),'desc'=>'Ajukan proposal ke manager untuk mendapat persetujuan','done'=>$ev['status']!=='draft','tab'=>'approval','action'=>'Lihat Approval','action_url'=>null],
+    ['icon'=>'person-check','label'=>'Tunggu Approval Manager','desc'=>'Manager akan meninjau dan menyetujui proposal','done'=>$approvedByMgr,'tab'=>null,'action'=>null,'action_url'=>null],
+    ['icon'=>'people','label'=>'Undang Panitia','desc'=>'Tambahkan anggota panitia inti dan pendukung','done'=>$hasPanitia,'tab'=>'tim','action'=>'Kelola Tim','action_url'=>null],
+    ['icon'=>'whatsapp','label'=>'Setup Grup WA & Dokumentasi','desc'=>'Atur link grup WhatsApp dan folder dokumentasi','done'=>$hasWA && $hasDoc,'tab'=>null,'action'=>null,'action_url'=>null],
+    ['icon'=>'trophy','label'=>'Acara Siap Berjalan','desc'=>'Semua persiapan selesai, acara bisa dilaksanakan','done'=>$isFullyApproved,'tab'=>null,'action'=>null,'action_url'=>null],
+  ];
+
+  // Hitung step aktif (yang belum done, pertama)
+  $activeStep = 0;
+  foreach ($steps as $i => $s) { if (!$s['done']) { $activeStep = $i; break; } if ($i === array_key_last($steps)) $activeStep = $i; }
+  $completedSteps = count(array_filter($steps, fn($s) => $s['done']));
+  $totalSteps = count($steps);
+?>
+<div class="card mb-4" style="border:2px solid #e2e8f0;border-radius:14px">
+  <div class="card-header d-flex align-items-center justify-content-between" style="background:linear-gradient(90deg,#f0f7ff,#fff);border-radius:12px 12px 0 0;border-bottom:1px solid #e2e8f0">
+    <div>
+      <div class="fw-700 fs-14"><i class="bi bi-map me-2 text-primary"></i>Persiapan Acara</div>
+      <div class="fs-12 text-muted"><?= $completedSteps ?>/<?= $totalSteps ?> langkah selesai</div>
+    </div>
+    <div style="width:120px">
+      <div class="progress" style="height:8px;border-radius:4px">
+        <div class="progress-bar bg-primary" style="width:<?= round($completedSteps/$totalSteps*100) ?>%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <?php foreach ($steps as $i => $step): ?>
+    <div class="d-flex align-items-start gap-3 px-4 py-3 <?= $i < $totalSteps-1 ? 'border-bottom' : '' ?>"
+         style="<?= $i === $activeStep && !$step['done'] ? 'background:#f8faff' : '' ?>">
+      <!-- Icon lingkaran -->
+      <div class="flex-shrink-0 d-flex align-items-center justify-content-center rounded-circle"
+           style="width:36px;height:36px;background:<?= $step['done'] ? '#d1fae5' : ($i===$activeStep ? '#dbeafe' : '#f1f5f9') ?>;margin-top:2px">
+        <?php if ($step['done']): ?>
+          <i class="bi bi-check-lg" style="color:#059669;font-size:.95rem"></i>
+        <?php elseif ($i===$activeStep): ?>
+          <i class="bi bi-<?= $step['icon'] ?>" style="color:#2563eb;font-size:.85rem"></i>
+        <?php else: ?>
+          <span style="color:#94a3b8;font-size:.8rem;font-weight:700"><?= $i+1 ?></span>
+        <?php endif; ?>
+      </div>
+      <!-- Label & desc -->
+      <div class="flex-grow-1">
+        <div class="fw-600 fs-13 <?= $step['done'] ? 'text-muted text-decoration-line-through' : ($i===$activeStep ? 'text-primary' : '') ?>"><?= $step['label'] ?></div>
+        <div class="fs-12 text-muted"><?= $step['desc'] ?></div>
+      </div>
+      <!-- Action -->
+      <?php if (!$step['done'] && $i===$activeStep): ?>
+        <?php if ($step['action_url']): ?>
+          <a href="<?= $step['action_url'] ?>" class="btn btn-primary btn-sm flex-shrink-0"><?= $step['action'] ?> <i class="bi bi-arrow-right ms-1"></i></a>
+        <?php elseif ($step['tab']): ?>
+          <button type="button" class="btn btn-primary btn-sm flex-shrink-0"
+                  onclick="switchToTab('<?= $step['tab'] ?>')"><?= $step['action'] ?> <i class="bi bi-arrow-right ms-1"></i></button>
+        <?php endif; ?>
+      <?php elseif ($step['done']): ?>
+        <span class="badge bg-success flex-shrink-0" style="align-self:center">Selesai</span>
+      <?php else: ?>
+        <span class="badge bg-light text-muted border flex-shrink-0" style="align-self:center">Menunggu</span>
+      <?php endif; ?>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <?php if ($completedSteps < 3): // Hint status approval ?>
+  <div class="card-footer fs-12 text-muted" style="background:#f8fafc;border-radius:0 0 12px 12px">
+    <i class="bi bi-info-circle me-1 text-primary"></i>
+    <?= htmlspecialchars($workflowHint) ?>
+  </div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
   <div class="row g-3">
     <div class="col-md-5">
       <div class="card mb-3">
@@ -383,6 +536,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <?php endif; ?>
           <?php if ($isPic): ?>
           <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
             <div class="input-group input-group-sm">
               <input type="url" name="wa_group_link" class="form-control" placeholder="https://chat.whatsapp.com/..." value="<?= htmlspecialchars($ev['wa_group_link'] ?? '') ?>">
               <button name="save_wa" class="btn btn-outline-secondary">Simpan</button>
@@ -404,6 +558,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <?php endif; ?>
           <?php if ($isPic): ?>
             <form method="POST" class="mt-3">
+              <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
               <div class="input-group input-group-sm">
                 <input type="url" name="link_dokumentasi" class="form-control" placeholder="https://drive.google.com/..." value="<?= htmlspecialchars($ev['link_dokumentasi'] ?? '') ?>">
                 <button name="save_doc" class="btn btn-outline-secondary">Simpan</button>
@@ -498,7 +653,13 @@ require_once __DIR__ . '/../../includes/layout/header.php';
                     <a href="<?= BASE_URL ?>/modules/files/edit.php?id=<?= $f['id'] ?>" class="btn btn-sm btn-outline-warning ms-1"><i class="bi bi-pencil"></i></a>
                   <?php endif; ?>
                   <?php if ($isEventAdmin || (int)($f['uploaded_by']??0)===(int)$_SESSION['user_id']): ?>
-                    <a href="<?= BASE_URL ?>/modules/files/delete.php?id=<?= $f['id'] ?>&event_id=<?= $id ?>" class="btn btn-sm btn-outline-danger ms-1" data-confirm="Hapus file ini?"><i class="bi bi-trash"></i></a>
+                    <form method="POST" action="<?= BASE_URL ?>/modules/files/delete.php" style="display:inline">
+                      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                      <input type="hidden" name="id" value="<?= $f['id'] ?>">
+                      <input type="hidden" name="event_id" value="<?= $id ?>">
+                      <button type="submit" class="btn btn-sm btn-outline-danger ms-1"
+                              data-confirm="Hapus file ini?"><i class="bi bi-trash"></i></button>
+                    </form>
                   <?php endif; ?>
                 </td>
               </tr>
@@ -513,6 +674,29 @@ require_once __DIR__ . '/../../includes/layout/header.php';
 
 <!-- ── TAB: TIM ── -->
 <div class="tab-pane fade" id="tim">
+  <?php
+  // Group panitia by bagian, mark PJ per bagian
+  $picList   = array_values(array_filter($panitia, fn($p) => $p['peran_acara'] === 'pic'));
+  $nonPicArr = array_values(array_filter($panitia, fn($p) => $p['peran_acara'] !== 'pic'));
+  $bagianMap = [];
+  foreach ($nonPicArr as $p) {
+      $bag = trim($p['bagian'] ?? '') ?: 'Umum';
+      $bagianMap[$bag][] = $p;
+  }
+  ksort($bagianMap);
+  foreach ($bagianMap as $bag => &$members) {
+      $pjSet = false;
+      foreach ($members as &$m) {
+          $m['is_pj'] = false;
+          if (!$pjSet && !empty($m['is_event_admin'])) { $m['is_pj'] = true; $pjSet = true; }
+      }
+      unset($m);
+      if (!$pjSet && !empty($members)) { $members[0]['is_pj'] = true; }
+      usort($members, fn($a, $b) => ($b['is_pj'] ? 1 : 0) - ($a['is_pj'] ? 1 : 0));
+  }
+  unset($members);
+  ?>
+
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
       <h6 class="fw-700 mb-0">Tim & Susunan Panitia</h6>
@@ -524,83 +708,451 @@ require_once __DIR__ . '/../../includes/layout/header.php';
       </button>
     <?php endif; ?>
   </div>
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead><tr><th>Nama</th><th>Divisi</th><th>Peran</th><th>Bagian</th><th>Konfirmasi</th><?php if($isEventAdmin):?><th>Aksi</th><?php endif;?></tr></thead>
-      <tbody>
-      <?php foreach ($panitia as $p): ?>
-        <tr>
-          <td>
-            <div class="d-flex align-items-center gap-2">
-              <div class="avatar avatar-sm"><?= strtoupper(substr($p['nama'],0,2)) ?></div>
-              <div>
-                <div class="fw-600"><?= htmlspecialchars($p['nama']) ?></div>
-                <div class="fs-12 text-muted"><?= htmlspecialchars($p['jabatan']??'') ?></div>
-              </div>
-            </div>
-          </td>
-          <td class="fs-12"><?= htmlspecialchars($p['divisi']??'—') ?></td>
-          <td>
-            <span class="badge bg-secondary"><?= $p['peran_acara']==='pic'?'PIC':(($p['is_event_admin']??0)?'Panitia Inti':'Panitia Biasa') ?></span>
-            <?php if ($p['is_event_admin']): ?><span class="badge bg-warning text-dark ms-1"><i class="bi bi-star-fill"></i></span><?php endif; ?>
-          </td>
-          <td><?= htmlspecialchars($p['bagian']??'—') ?></td>
-          <td><span class="badge bg-<?= $konfirmColor[$p['status_konfirmasi']] ?>"><?= $konfirmLabel[$p['status_konfirmasi']] ?></span></td>
-          <?php if ($isEventAdmin): ?>
-          <td>
-            <?php if ($p['peran_acara']!=='pic'): ?>
-              <a href="<?= BASE_URL ?>/modules/panitia/toggle_admin.php?id=<?= $p['id'] ?>&event_id=<?= $id ?>" class="btn btn-sm btn-outline-warning" data-confirm="<?= $p['is_event_admin']?'Cabut':'Jadikan' ?> Event Admin?"><i class="bi bi-star<?= $p['is_event_admin']?'-fill':'' ?>"></i></a>
-              <a href="<?= BASE_URL ?>/modules/panitia/remove.php?id=<?= $p['id'] ?>&event_id=<?= $id ?>" class="btn btn-sm btn-outline-danger ms-1" data-confirm="Keluarkan dari panitia?"><i class="bi bi-person-dash"></i></a>
-            <?php endif; ?>
-          </td>
-          <?php endif; ?>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
+
+  <?php if (empty($panitia)): ?>
+    <div class="empty-state">
+      <i class="bi bi-person-plus"></i>
+      <p>Belum ada panitia. Undang anggota tim untuk mulai.</p>
+    </div>
+  <?php else: ?>
+
+  <!-- PIC Row -->
+  <?php if (!empty($picList)): ?>
+  <div class="card mb-3" style="border-left:4px solid #ef4444">
+    <div class="card-body py-2 px-3">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="badge bg-danger px-2">PIC</span>
+        <span class="fs-11 fw-600 text-muted text-uppercase" style="letter-spacing:.05em">Penanggung Jawab Acara</span>
+      </div>
+      <div class="d-flex flex-wrap gap-3">
+        <?php foreach ($picList as $p): ?>
+        <div class="d-flex align-items-center gap-2">
+          <div class="avatar avatar-sm"><?= strtoupper(substr($p['nama'],0,2)) ?></div>
+          <div>
+            <span class="fw-700 fs-14"><?= htmlspecialchars($p['nama']) ?></span>
+            <?php if ($p['jabatan'] ?? ''): ?><span class="text-muted fs-12 ms-1">· <?= htmlspecialchars($p['jabatan']) ?></span><?php endif; ?>
+            <i class="bi bi-<?= $p['status_konfirmasi']==='bersedia'?'check-circle-fill text-success':($p['status_konfirmasi']==='tidak_bisa'?'x-circle-fill text-danger':'clock-history text-warning') ?> ms-2 fs-13" title="<?= $konfirmLabel[$p['status_konfirmasi']] ?>"></i>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
   </div>
+  <?php endif; ?>
+
+  <!-- Bagian / Jobdesk Groups -->
+  <?php if (!empty($bagianMap)): ?>
+  <div class="fs-12 text-muted fw-600 text-uppercase mb-2 ps-1" style="letter-spacing:.05em">
+    <i class="bi bi-diagram-3 me-1"></i>Susunan Per Bagian
+    <span class="badge bg-secondary ms-1"><?= count($bagianMap) ?> jobdesk</span>
+  </div>
+  <?php foreach ($bagianMap as $bagian => $members):
+    $pjMember = null;
+    foreach ($members as $m) { if (!empty($m['is_pj'])) { $pjMember = $m; break; } }
+  ?>
+  <div class="card mb-2">
+    <div class="card-body py-2 px-3">
+      <div class="d-flex align-items-start gap-3 flex-wrap">
+        <!-- Bagian label -->
+        <div class="flex-shrink-0 pt-1">
+          <span class="badge bg-primary fw-600 px-3 py-2 fs-12" style="min-width:88px;text-align:center"><?= htmlspecialchars($bagian) ?></span>
+          <div class="fs-11 text-muted text-center mt-1"><?= count($members) ?> orang</div>
+        </div>
+        <!-- Members list -->
+        <div class="d-flex flex-wrap gap-2 align-items-center flex-grow-1 py-1">
+          <?php foreach ($members as $m): ?>
+          <div class="d-inline-flex align-items-center gap-1 px-2 py-1 rounded"
+               style="background:<?= !empty($m['is_pj']) ? '#fffbeb' : '#f8fafc' ?>;border:1px solid <?= !empty($m['is_pj']) ? '#fbbf24' : '#e2e8f0' ?>">
+            <div class="avatar" style="width:24px;height:24px;font-size:.65rem;flex-shrink:0"><?= strtoupper(substr($m['nama'],0,1)) ?></div>
+            <span class="fw-600 fs-13"><?= htmlspecialchars($m['nama']) ?></span>
+            <?php if (!empty($m['is_pj'])): ?>
+              <span class="badge bg-warning text-dark fs-11 px-1">PJ</span>
+            <?php endif; ?>
+            <i class="bi bi-<?= $m['status_konfirmasi']==='bersedia'?'check-circle-fill text-success':($m['status_konfirmasi']==='tidak_bisa'?'x-circle-fill text-danger':'clock-history text-warning') ?>"
+               style="font-size:.78rem" title="<?= $konfirmLabel[$m['status_konfirmasi']] ?>"></i>
+            <?php if ($isEventAdmin && $m['peran_acara']!=='pic'): ?>
+            <div class="d-inline-flex gap-1 ms-1 border-start ps-1">
+              <form method="POST" action="<?= BASE_URL ?>/modules/panitia/toggle_admin.php" style="display:inline">
+                <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                <input type="hidden" name="id" value="<?= $m['id'] ?>">
+                <input type="hidden" name="event_id" value="<?= $id ?>">
+                <button type="submit" class="btn p-0 border-0 bg-transparent"
+                        data-confirm="<?= !empty($m['is_event_admin'])?'Cabut jabatan Event Admin dari':'Jadikan' ?> <?= htmlspecialchars($m['nama']) ?> sebagai Event Admin?"
+                        style="width:18px;height:18px;line-height:1" title="<?= !empty($m['is_event_admin'])?'Cabut Admin':'Jadikan Admin' ?>">
+                  <i class="bi bi-star<?= !empty($m['is_event_admin'])?'-fill text-warning':' text-muted' ?>" style="font-size:.72rem"></i>
+                </button>
+              </form>
+              <form method="POST" action="<?= BASE_URL ?>/modules/panitia/remove.php" style="display:inline">
+                <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                <input type="hidden" name="id" value="<?= $m['id'] ?>">
+                <input type="hidden" name="event_id" value="<?= $id ?>">
+                <button type="submit" class="btn p-0 border-0 bg-transparent"
+                        data-confirm="Keluarkan <?= htmlspecialchars($m['nama']) ?> dari panitia?"
+                        style="width:18px;height:18px;line-height:1" title="Hapus dari panitia">
+                  <i class="bi bi-person-x text-danger" style="font-size:.72rem"></i>
+                </button>
+              </form>
+            </div>
+            <?php endif; ?>
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <!-- PJ label ringkas -->
+        <?php if ($pjMember): ?>
+        <div class="flex-shrink-0 fs-12 text-muted align-self-center">
+          PJ: <span class="fw-600 text-dark"><?= htmlspecialchars($pjMember['nama']) ?></span>
+        </div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+  <?php endforeach; ?>
+  <?php endif; ?>
+
+  <!-- Legenda -->
+  <div class="d-flex gap-3 mt-3 fs-12 text-muted align-items-center flex-wrap">
+    <span><i class="bi bi-check-circle-fill text-success me-1"></i>Bersedia</span>
+    <span><i class="bi bi-x-circle-fill text-danger me-1"></i>Tidak Bisa</span>
+    <span><i class="bi bi-clock-history text-warning me-1"></i>Menunggu</span>
+    <span><span class="badge bg-warning text-dark me-1">PJ</span>Penanggung Jawab Bagian</span>
+    <?php if ($isEventAdmin): ?>
+    <span><i class="bi bi-star-fill text-warning me-1"></i>Event Admin</span>
+    <?php endif; ?>
+  </div>
+
+  <?php endif; // end if panitia ?>
 </div>
 
 <!-- ── TAB: CHECKLIST ── -->
 <div class="tab-pane fade" id="checklist">
+  <?php
+    $totalTasks  = count($checks);
+    $selesaiTasks = count(array_filter($checks, fn($c) => ($c['status'] ?? ($c['is_done'] ? 'selesai' : 'belum')) === 'selesai'));
+    $pct = $totalTasks ? round($selesaiTasks / $totalTasks * 100) : 0;
+  ?>
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h6 class="fw-700 mb-0">Checklist Persiapan</h6>
-    <?php if ($doneChecks > 0): ?><span class="badge bg-success fs-12"><?= round($doneChecks/max(count($checks),1)*100) ?>% Selesai</span><?php endif; ?>
+    <h6 class="fw-700 mb-0">To Do List <span class="text-muted fw-normal fs-13">(<?= $totalTasks ?> task)</span></h6>
+    <div class="d-flex align-items-center gap-2">
+      <?php if ($totalTasks > 0): ?>
+        <span class="badge bg-success fs-12"><?= $pct ?>% Selesai</span>
+      <?php endif; ?>
+      <?php if ($isEventAdmin): ?>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddTodo">
+          <i class="bi bi-plus-lg me-1"></i>Tambah Task
+        </button>
+      <?php endif; ?>
+    </div>
   </div>
-  <?php if (count($checks) > 0): ?>
+
+  <?php if ($totalTasks > 0): ?>
+    <div class="progress mb-3" style="height:8px;border-radius:4px">
+      <div class="progress-bar bg-success" style="width:<?= $pct ?>%"></div>
+    </div>
     <div class="card">
-      <div class="card-body">
-        <div class="progress mb-3" style="height:8px;border-radius:4px">
-          <div class="progress-bar bg-success" style="width:<?= count($checks)?round($doneChecks/count($checks)*100):0 ?>%"></div>
-        </div>
-        <?php foreach ($checks as $c): ?>
-          <form method="POST" class="d-flex align-items-center gap-2 py-2 border-bottom">
-            <input type="hidden" name="toggle_check" value="1">
-            <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
-            <input type="hidden" name="is_done" value="<?= $c['is_done']?0:1 ?>">
-            <button type="submit" class="btn p-0 border-0 bg-transparent flex-shrink-0">
-              <i class="bi bi-<?= $c['is_done']?'check-circle-fill text-success':'circle text-muted' ?> fs-5"></i>
-            </button>
-            <span class="flex-grow-1 fs-13 <?= $c['is_done']?'text-decoration-line-through text-muted':'' ?>">
-              <?= htmlspecialchars($c['item']) ?>
-              <?php if ($c['kategori']): ?><span class="badge bg-light text-dark border ms-1 fs-12"><?= htmlspecialchars($c['kategori']) ?></span><?php endif; ?>
-            </span>
-          </form>
-        <?php endforeach; ?>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 fs-13">
+          <thead class="table-light">
+            <tr>
+              <th style="width:36px"></th>
+              <th>Nama Task</th>
+              <th style="width:130px">Deadline</th>
+              <th style="width:160px">PJ</th>
+              <th style="width:140px">Status</th>
+              <?php if ($isEventAdmin): ?><th style="width:60px"></th><?php endif; ?>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($checks as $c):
+            $st = $c['status'] ?? ($c['is_done'] ? 'selesai' : 'belum');
+            $stLabel = ['belum'=>'Belum Mulai','on_progres'=>'On Progress','selesai'=>'Selesai'];
+            $stBadge = ['belum'=>'secondary','on_progres'=>'warning text-dark','selesai'=>'success'];
+          ?>
+            <tr class="<?= $st==='selesai' ? 'table-success bg-opacity-25' : '' ?>">
+              <td class="text-center">
+                <?php if ($isEventAdmin): ?>
+                <form method="POST" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                  <input type="hidden" name="update_todo_status" value="1">
+                  <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
+                  <input type="hidden" name="todo_status" value="<?= $st==='selesai' ? 'belum' : 'selesai' ?>">
+                  <button type="submit" class="btn p-0 border-0 bg-transparent">
+                    <i class="bi bi-<?= $st==='selesai' ? 'check-circle-fill text-success' : 'circle text-muted' ?> fs-5"></i>
+                  </button>
+                </form>
+                <?php else: ?>
+                  <i class="bi bi-<?= $st==='selesai' ? 'check-circle-fill text-success' : ($st==='on_progres' ? 'clock-fill text-warning' : 'circle text-muted') ?> fs-5"></i>
+                <?php endif; ?>
+              </td>
+              <td>
+                <span class="<?= $st==='selesai' ? 'text-decoration-line-through text-muted' : '' ?>">
+                  <?= htmlspecialchars($c['item']) ?>
+                </span>
+                <?php if ($c['kategori'] ?? ''): ?>
+                  <span class="badge bg-light text-dark border ms-1 fs-12"><?= htmlspecialchars($c['kategori']) ?></span>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if ($c['deadline'] ?? ''): ?>
+                  <?php
+                    $dl = new DateTime($c['deadline']);
+                    $now = new DateTime();
+                    $isLate = $st !== 'selesai' && $dl < $now;
+                  ?>
+                  <span class="<?= $isLate ? 'text-danger fw-600' : '' ?>">
+                    <?php if ($isLate): ?><i class="bi bi-exclamation-circle me-1"></i><?php endif; ?>
+                    <?= $dl->format('d M Y') ?>
+                  </span>
+                <?php else: ?>
+                  <span class="text-muted">—</span>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if ($c['pj'] ?? ''): ?>
+                  <i class="bi bi-person me-1 text-muted"></i><?= htmlspecialchars($c['pj']) ?>
+                <?php else: ?>
+                  <span class="text-muted">—</span>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if ($isEventAdmin): ?>
+                <form method="POST" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                  <input type="hidden" name="update_todo_status" value="1">
+                  <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
+                  <select name="todo_status" class="form-select form-select-sm py-0" style="min-width:120px"
+                          onchange="this.form.submit()">
+                    <option value="belum"       <?= $st==='belum'       ?'selected':'' ?>>Belum Mulai</option>
+                    <option value="on_progres"  <?= $st==='on_progres'  ?'selected':'' ?>>On Progress</option>
+                    <option value="selesai"     <?= $st==='selesai'     ?'selected':'' ?>>Selesai</option>
+                  </select>
+                </form>
+                <?php else: ?>
+                  <span class="badge bg-<?= $stBadge[$st] ?>"><?= $stLabel[$st] ?></span>
+                <?php endif; ?>
+              </td>
+              <?php if ($isEventAdmin): ?>
+              <td class="text-center">
+                <div class="d-flex gap-2 justify-content-center">
+                  <button type="button" class="btn btn-sm btn-link text-primary p-0"
+                    onclick="openEditTodo(<?= $c['id'] ?>, <?= htmlspecialchars(json_encode($c['item']), ENT_QUOTES) ?>, '<?= htmlspecialchars($c['deadline'] ?? '', ENT_QUOTES) ?>', <?= htmlspecialchars(json_encode($c['pj'] ?? ''), ENT_QUOTES) ?>, '<?= $st ?>')">
+                    <i class="bi bi-pencil-square"></i>
+                  </button>
+                  <form method="POST" onsubmit="return confirm('Hapus task ini?')">
+                    <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                    <input type="hidden" name="delete_todo" value="1">
+                    <input type="hidden" name="check_id" value="<?= $c['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-link text-danger p-0">
+                      <i class="bi bi-trash3"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+              <?php endif; ?>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
       </div>
     </div>
+
   <?php else: ?>
-    <div class="empty-state"><i class="bi bi-list-check"></i><p>Belum ada checklist.</p></div>
+    <div class="empty-state">
+      <i class="bi bi-list-check"></i>
+      <p>Belum ada task.</p>
+      <?php if ($isEventAdmin): ?>
+        <button class="btn btn-primary btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#modalAddTodo">
+          <i class="bi bi-plus-lg me-1"></i>Tambah Task Pertama
+        </button>
+      <?php endif; ?>
+    </div>
   <?php endif; ?>
 </div>
 
-<!-- ── TAB: APPROVAL (PIC only) ── -->
+<!-- ── MODAL: Tambah Todo ── -->
+<?php if ($isEventAdmin): ?>
+<div class="modal fade" id="modalAddTodo" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+        <input type="hidden" name="add_todo" value="1">
+        <div class="modal-header">
+          <h6 class="modal-title fw-700"><i class="bi bi-plus-circle me-2"></i>Tambah Task</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-600">Nama Task <span class="text-danger">*</span></label>
+            <input type="text" name="todo_nama" class="form-control" placeholder="Contoh: Persiapan dekorasi panggung" required maxlength="300">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-600">Deadline</label>
+            <input type="date" name="todo_deadline" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-600">PJ (Penanggung Jawab)</label>
+            <input type="text" name="todo_pj" class="form-control" placeholder="Nama orang atau tim" list="pj-suggestions" maxlength="150">
+            <datalist id="pj-suggestions">
+              <?php foreach ($panitia as $p): ?>
+                <option value="<?= htmlspecialchars($p['nama']) ?>">
+              <?php endforeach; ?>
+              <!-- Common team options -->
+              <option value="Seluruh Panitia">
+              <option value="Tim Logistik">
+              <option value="Tim Dokumentasi">
+              <option value="Tim Konsumsi">
+              <option value="Tim Acara">
+            </datalist>
+            <div class="form-text">Ketik nama langsung atau pilih dari daftar panitia.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-600">Status</label>
+            <select name="todo_status" class="form-select">
+              <option value="belum">Belum Mulai</option>
+              <option value="on_progres">On Progress</option>
+              <option value="selesai">Selesai</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Tambah Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- ── MODAL: Edit Todo ── -->
+<?php if ($isEventAdmin): ?>
+<div class="modal fade" id="modalEditTodo" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" id="formEditTodo">
+        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+        <input type="hidden" name="edit_todo" value="1">
+        <input type="hidden" name="check_id" id="editTodoId">
+        <div class="modal-header">
+          <h6 class="modal-title fw-700"><i class="bi bi-pencil-square me-2"></i>Edit Task</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-600">Nama Task <span class="text-danger">*</span></label>
+            <input type="text" name="todo_nama" id="editTodoNama" class="form-control" required maxlength="300">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-600">Deadline</label>
+            <input type="date" name="todo_deadline" id="editTodoDeadline" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-600">PJ (Penanggung Jawab)</label>
+            <input type="text" name="todo_pj" id="editTodoPj" class="form-control" list="pj-suggestions-edit" maxlength="150">
+            <datalist id="pj-suggestions-edit">
+              <?php foreach ($panitia as $p): ?>
+                <option value="<?= htmlspecialchars($p['nama']) ?>">
+              <?php endforeach; ?>
+              <option value="Seluruh Panitia">
+              <option value="Tim Logistik">
+              <option value="Tim Dokumentasi">
+              <option value="Tim Konsumsi">
+              <option value="Tim Acara">
+            </datalist>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-600">Status</label>
+            <select name="todo_status" id="editTodoStatus" class="form-select">
+              <option value="belum">Belum Mulai</option>
+              <option value="on_progres">On Progress</option>
+              <option value="selesai">Selesai</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function openEditTodo(id, nama, deadline, pj, status) {
+  document.getElementById('editTodoId').value       = id;
+  document.getElementById('editTodoNama').value     = nama;
+  document.getElementById('editTodoDeadline').value = deadline;
+  document.getElementById('editTodoPj').value       = pj;
+  document.getElementById('editTodoStatus').value   = status;
+  var modal = new bootstrap.Modal(document.getElementById('modalEditTodo'));
+  modal.show();
+}
+</script>
+<?php endif; ?>
 <?php if ($isPic): ?>
 <div class="tab-pane fade" id="approval">
+  <?php
+  // Cek apakah sudah ada pengajuan ke manager untuk level ini
+  $levelToTipe = ['TK'=>'manager_tk','SD'=>'manager_sd','SMP'=>'manager_smp','Umum'=>'kepala_sekolah'];
+  $tipeManagerEvent = $levelToTipe[$ev['level']] ?? null;
+  $levelApproverLabelLocal = ['TK'=>'Manager TK','SD'=>'Manager SD','SMP'=>'Manager SMP','Umum'=>'Kepala Sekolah'];
+  $namaApproverTarget = $levelApproverLabelLocal[$ev['level']] ?? 'Manager';
+
+  $sudahDiajukanKeManager = false;
+  foreach ($approvals as $ap) {
+    if ($ap['tipe_approver'] === $tipeManagerEvent) { $sudahDiajukanKeManager = true; break; }
+  }
+
+  // Cek dokumen proposal/RAB sudah ada
+  $pFilesQ = $pdo->prepare("SELECT COUNT(*) FROM event_files WHERE event_id=? AND file_type IN ('proposal','rab')");
+  $pFilesQ->execute([$id]); $jumlahDokProposal = (int)$pFilesQ->fetchColumn();
+  ?>
+
+  <!-- Info alur approval -->
+  <div class="card mb-3" style="border-left:4px solid #2563eb">
+    <div class="card-body py-3">
+      <div class="d-flex align-items-start gap-3">
+        <i class="bi bi-diagram-3 text-primary fs-4 flex-shrink-0 mt-1"></i>
+        <div>
+          <div class="fw-700 mb-1">Alur Approval Acara Level <?= htmlspecialchars($ev['level']) ?></div>
+          <div class="fs-13 text-muted">Acara level <strong><?= htmlspecialchars($ev['level']) ?></strong> membutuhkan persetujuan dari <strong><?= htmlspecialchars($namaApproverTarget) ?></strong>. Upload proposal/RAB terlebih dahulu, lalu ajukan.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <?php if ($ev['status']==='draft' && !$sudahDiajukanKeManager): ?>
+  <!-- Belum diajukan ke manager -->
+  <div class="card mb-3 border-warning">
+    <div class="card-body">
+      <div class="fw-700 mb-2"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Belum Diajukan ke <?= htmlspecialchars($namaApproverTarget) ?></div>
+      <?php if ($jumlahDokProposal === 0): ?>
+        <div class="alert alert-warning fs-13 mb-3">
+          <i class="bi bi-folder2 me-2"></i>Upload dokumen <strong>Proposal</strong> atau <strong>RAB</strong> terlebih dahulu sebelum mengajukan.
+          <a href="<?= BASE_URL ?>/modules/files/upload.php?event_id=<?= $id ?>" class="btn btn-sm btn-warning ms-3">
+            <i class="bi bi-upload me-1"></i>Upload Sekarang
+          </a>
+        </div>
+      <?php else: ?>
+        <div class="fs-13 text-muted mb-3">
+          Dokumen tersedia (<?= $jumlahDokProposal ?> file). Klik tombol di bawah untuk mengajukan proposal ke <?= htmlspecialchars($namaApproverTarget) ?>.
+        </div>
+        <form method="POST" action="<?= BASE_URL ?>/modules/events/detail.php?id=<?= $id ?>">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <input type="hidden" name="submit_to_manager" value="1">
+          <button type="submit" class="btn btn-primary" data-confirm="Ajukan ke <?= htmlspecialchars($namaApproverTarget) ?>? Pastikan dokumen sudah lengkap.">
+            <i class="bi bi-send-plus me-2"></i>Ajukan ke <?= htmlspecialchars($namaApproverTarget) ?>
+          </button>
+        </form>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <div class="row g-3">
     <div class="col-md-7">
       <div class="card">
-        <div class="card-header"><i class="bi bi-diagram-3"></i> Status Approval</div>
+        <div class="card-header"><i class="bi bi-diagram-3"></i> Riwayat Approval</div>
         <div class="card-body p-0">
           <?php if (empty($approvals)): ?>
             <div class="empty-state py-4"><i class="bi bi-check2-circle"></i><p>Belum ada approval dibuat</p></div>
@@ -653,10 +1205,12 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           <?php endif; ?>
         </div>
       </div>
+      <?php if (isSuperAdmin()): ?>
       <div class="card">
-        <div class="card-header"><i class="bi bi-send"></i> Tambah Approval</div>
+        <div class="card-header"><i class="bi bi-shield-lock"></i> Tambah Approval Manual <small class="text-muted">(Superadmin)</small></div>
         <div class="card-body">
           <form method="POST" action="<?= BASE_URL ?>/modules/approvals/">
+            <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
             <input type="hidden" name="event_id" value="<?= $id ?>">
             <div class="mb-3">
               <label class="form-label">Tipe Approver</label>
@@ -682,6 +1236,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
           </form>
         </div>
       </div>
+      <?php endif; ?>
     </div>
   </div>
 </div>
@@ -717,6 +1272,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
                   <span class="badge bg-primary flex-shrink-0 mt-1"><?= $i+1 ?></span>
                   <div class="flex-grow-1 fs-13"><?= htmlspecialchars($sq['pertanyaan']) ?></div>
                   <form method="POST" class="flex-shrink-0">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
                     <input type="hidden" name="del_swot_q" value="1">
                     <input type="hidden" name="question_id" value="<?= $sq['id'] ?>">
                     <button type="submit" class="btn btn-sm btn-outline-danger p-1" data-confirm="Hapus pertanyaan ini?" title="Hapus">
@@ -735,7 +1291,8 @@ require_once __DIR__ . '/../../includes/layout/header.php';
 
           <!-- Form tambah pertanyaan baru -->
           <form method="POST">
-            <input type="hidden" name="add_swot_q" value="1">
+            <input type="hidden" name="add_swot_q"
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"> value="1">
             <div class="input-group">
               <input type="text" name="pertanyaan" class="form-control form-control-sm"
                      placeholder="Contoh: Apa kendala koordinasi antar divisi?" required
@@ -788,9 +1345,11 @@ require_once __DIR__ . '/../../includes/layout/header.php';
             Setelah dikirim, pertanyaan tidak bisa diubah.<br>
             <?= count($panitia) ?> panitia akan menerima notifikasi.
           </div>
-          <form method="POST" onsubmit="return confirm('Kirim form SWOT ke <?= count($panitia) ?> panitia? Pertanyaan tidak bisa diubah setelah ini.');">
-            <input type="hidden" name="send_swot" value="1">
-            <button type="submit" class="btn btn-light fw-700 w-100">
+          <form method="POST">
+            <input type="hidden" name="send_swot"
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"> value="1">
+            <button type="submit" class="btn btn-light fw-700 w-100"
+                    data-confirm="Kirim form SWOT ke <?= count($panitia) ?> panitia? Pertanyaan tidak bisa diubah setelah ini.">
               <i class="bi bi-send me-2"></i>Kirim SWOT ke Panitia
             </button>
           </form>
@@ -853,10 +1412,10 @@ require_once __DIR__ . '/../../includes/layout/header.php';
         <!-- Tombol reminder WA -->
         <div class="card-footer bg-transparent pt-3">
           <?php
-          $reminderMsg = "📋 *Reminder Evaluasi SWOT*\n"
+          $reminderMsg = "📋 *Reminder Evaluasi*\n"
                         . "Acara: *{$ev['judul']}*\n\n"
-                        . "Mohon segera isi evaluasi SWOT acara ini.\n"
-                        . "Buka workspace acara → Tab *Evaluasi SWOT*\n\n"
+                        . "Mohon segera isi evaluasi acara ini.\n"
+                        . "Buka workspace acara → Tab *Evaluasi*\n\n"
                         . BASE_URL . "/modules/events/workspace.php?id={$id}\n\n"
                         . "Sudah isi: " . ($sudahCount??0) . "/" . count($swotTracking) . " panitia. Terima kasih 🙏";
           $waLink = $ev['wa_group_link'] ?? '';
@@ -1005,7 +1564,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
   <div class="text-center py-5">
     <i class="bi bi-hourglass-split fs-1 text-muted d-block mb-3"></i>
     <div class="fw-700 mb-1">Menunggu PIC membuka form evaluasi</div>
-    <div class="text-muted fs-13">PIC sedang menyiapkan pertanyaan evaluasi SWOT.<br>Kamu akan mendapat notifikasi saat form sudah bisa diisi.</div>
+    <div class="text-muted fs-13">PIC sedang menyiapkan pertanyaan evaluasi. Kamu akan mendapat notifikasi saat form sudah bisa diisi.</div>
   </div>
 
   <?php elseif (!$sudahSwot): ?>
@@ -1014,11 +1573,12 @@ require_once __DIR__ . '/../../includes/layout/header.php';
     <div class="col-md-8">
       <div class="card">
         <div class="card-header fw-700">
-          <i class="bi bi-pencil-square me-2"></i>Form Evaluasi SWOT — <?= htmlspecialchars($ev['judul']) ?>
+          <i class="bi bi-pencil-square me-2"></i>Form Evaluasi — <?= htmlspecialchars($ev['judul']) ?>
         </div>
         <div class="card-body">
           <form method="POST">
-            <input type="hidden" name="submit_swot" value="1">
+            <input type="hidden" name="submit_swot"
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"> value="1">
 
             <!-- Identitas: auto-filled, read-only -->
             <div class="row g-3 mb-4">
@@ -1110,7 +1670,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
             </div>
 
             <button type="submit" class="btn btn-primary w-100 py-2 fw-700">
-              <i class="bi bi-send me-2"></i>Kirim Evaluasi SWOT
+              <i class="bi bi-send me-2"></i>Kirim Evaluasi
             </button>
           </form>
         </div>
@@ -1213,6 +1773,9 @@ $totalPanitiaEval = count($panitia);
             <?php endif; ?>
             <?php if ($isPic): ?>
               <a href="<?= BASE_URL ?>/modules/evaluasi/results.php?id=<?= $ev2['id'] ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-bar-chart-line me-1"></i>Hasil</a>
+              <button type="button" class="btn btn-outline-danger btn-sm delete-eval-button" data-evaluation-id="<?= $ev2['id'] ?>" data-evaluation-title="<?= htmlspecialchars($ev2['judul'], ENT_QUOTES) ?>">
+                <i class="bi bi-trash me-1"></i>Hapus
+              </button>
             <?php endif; ?>
           </div>
         </div>
@@ -1225,6 +1788,32 @@ $totalPanitiaEval = count($panitia);
 
 <!-- Modal Quick Invite Panitia -->
 <?php if ($isPic || $isEventAdmin): ?>
+<div class="modal fade" id="deleteEvalModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Hapus Evaluasi</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Kamu akan menghapus evaluasi ini. Proses ini tidak bisa dikembalikan.</p>
+        <p class="fw-600" id="deleteEvalTitle">-</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteEvalBtn">
+          <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+          <span class="btn-text">Hapus</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<form method="POST" id="deleteEvalForm" class="d-none">
+  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+  <input type="hidden" name="delete_evaluation" value="1">
+  <input type="hidden" name="evaluation_id" id="evaluationIdInput" value="0">
+</form>
 <div class="modal fade" id="modalInviteQuick" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -1233,6 +1822,7 @@ $totalPanitiaEval = count($panitia);
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="<?= BASE_URL ?>/modules/panitia/bulk_invite.php">
+        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="event_id" value="<?= $id ?>">
         <input type="hidden" name="peran_acara" value="panitia_inti">
         <div class="modal-body">
@@ -1300,11 +1890,51 @@ document.addEventListener('DOMContentLoaded', function() {
   rows.forEach(row => row.addEventListener('click', () => selectRow(row)));
 });
 
+// Fix 4: Switch tab dari wizard progress (bukan pakai data-bs-toggle yang kadang tidak trigger)
+function switchToTab(tabId) {
+  const navLink = document.querySelector('.nav-link[href="#' + tabId + '"]');
+  if (navLink) {
+    const bsTab = bootstrap.Tab.getOrCreateInstance(navLink);
+    bsTab.show();
+    // Scroll ke area tabs
+    const tabBar = document.getElementById('workspaceTabs');
+    if (tabBar) tabBar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 // Status update form
 function submitStatus(s) {
   document.getElementById('statusInput').value = s;
-  document.getElementById('statusForm').querySelector('[type=submit]').click();
+  document.getElementById('statusSubmitBtn').click();
 }
+function submitStatusConfirm(s, msg) {
+  showConfirmModal(msg, function() {
+    document.getElementById('statusInput').value = s;
+    document.getElementById('statusSubmitBtn').click();
+  });
+}
+
+// Evaluasi delete flow
+let deleteEvalModal;
+document.addEventListener('DOMContentLoaded', function() {
+  deleteEvalModal = new bootstrap.Modal(document.getElementById('deleteEvalModal'));
+  document.querySelectorAll('.delete-eval-button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const evalId = btn.dataset.evaluationId;
+      const title = btn.dataset.evaluationTitle;
+      document.getElementById('deleteEvalTitle').textContent = title;
+      document.getElementById('evaluationIdInput').value = evalId;
+      deleteEvalModal.show();
+    });
+  });
+  document.getElementById('confirmDeleteEvalBtn').addEventListener('click', function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.querySelector('.btn-text').textContent = 'Menghapus...';
+    document.getElementById('deleteEvalForm').submit();
+  });
+});
 
 // Invite modal
 document.getElementById('quickSearch')?.addEventListener('input', function() {
@@ -1330,7 +1960,7 @@ function kirimReminderWA() {
   const msg    = <?= json_encode($reminderMsg ?? '') ?>;
 
   if (!waLink) {
-    alert('Link grup WA belum diatur.\nAtur terlebih dahulu di tab Overview → Grup WhatsApp.');
+    showToast('Link grup WA belum diatur. Atur terlebih dahulu di tab Overview → Grup WhatsApp.', 'warning');
     return;
   }
 
@@ -1352,12 +1982,16 @@ function kirimReminderWA() {
   });
 }
 
-// data-confirm global handler
-document.querySelectorAll('[data-confirm]').forEach(el => {
-  el.addEventListener('click', function(e) {
-    if (!confirm(this.dataset.confirm)) e.preventDefault();
-  });
-});
+// data-confirm: ditangani oleh modal di footer.php
+
+function showToast(message, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `position-fixed bottom-0 end-0 m-3 alert alert-${type} shadow`;
+  toast.style.cssText = 'z-index:9999;min-width:280px;';
+  toast.innerHTML = `<i class="bi bi-${type === 'success' ? 'check-circle-fill' : type === 'warning' ? 'exclamation-triangle-fill' : 'info-circle-fill'} me-2"></i>${message}`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4500);
+}
 </script>
 
 <?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>
