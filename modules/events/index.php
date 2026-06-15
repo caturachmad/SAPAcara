@@ -150,6 +150,8 @@ function getStatusPillClass(string $status, array $map): string {
 }
 ?>
 
+<?php $isAdminOrSA = isAdmin() || isSuperAdmin(); ?>
+
 <div class="page-header">
   <div>
     <h5>Semua Acara</h5>
@@ -162,11 +164,132 @@ function getStatusPillClass(string $status, array $map): string {
   </a>
 </div>
 
+<!-- PR-05: Tabs: Aktif / Arsip -->
+<?php if ($isAdminOrSA): ?>
+<ul class="nav nav-tabs mb-4" id="eventIndexTabs">
+  <li class="nav-item">
+    <a class="nav-link <?= (!isset($_GET['tab']) || $_GET['tab'] !== 'arsip') ? 'active' : '' ?>"
+       href="?<?= http_build_query(array_merge($_GET, ['tab' => 'aktif'])) ?>">
+      <i class="bi bi-calendar-event me-1"></i>Akan Datang / Berjalan
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link <?= (($_GET['tab'] ?? '') === 'arsip') ? 'active' : '' ?>"
+       href="?<?= http_build_query(array_merge($_GET, ['tab' => 'arsip'])) ?>">
+      <i class="bi bi-archive me-1"></i>Arsip Selesai
+    </a>
+  </li>
+</ul>
+<?php endif; ?>
+
 <?php if ($queryError): ?>
   <div class="alert alert-danger mb-4" role="alert">
     <?= htmlspecialchars($queryError) ?>
   </div>
 <?php endif; ?>
+
+<?php
+// PR-05: Arsip tab (selesai events) for admin
+if ($isAdminOrSA && ($_GET['tab'] ?? '') === 'arsip'):
+    // Query arsip (selesai events)
+    $arsipConditions = [];
+    $arsipParams = [];
+    $arsipConditions[] = "e.status = 'selesai'";
+    if ($filterLevel !== '') {
+        $arsipConditions[] = 'e.level = ?';
+        $arsipParams[] = $filterLevel;
+    }
+    if ($search !== '') {
+        $arsipConditions[] = 'e.judul LIKE ?';
+        $arsipParams[] = "%{$search}%";
+    }
+    $arsipWhere = 'WHERE ' . implode(' AND ', $arsipConditions);
+    $arsipStmt = $pdo->prepare("
+        SELECT e.id, e.judul, e.level, e.tanggal_mulai, e.tanggal_selesai, e.is_template, e.template_notes,
+               u.nama AS nama_pic,
+               (SELECT COUNT(*) FROM event_panitia ep WHERE ep.event_id=e.id) AS jml_panitia,
+               (SELECT COUNT(*) FROM event_swot sw WHERE sw.event_id=e.id) AS jml_swot
+        FROM events e LEFT JOIN users u ON u.id=e.pic_id
+        $arsipWhere
+        ORDER BY e.tanggal_selesai DESC
+        LIMIT 50
+    ");
+    $arsipStmt->execute($arsipParams);
+    $arsipEvents = $arsipStmt->fetchAll();
+?>
+<!-- Filter untuk arsip -->
+<div class="filter-bar mb-4">
+  <form method="GET" class="row g-2 align-items-end">
+    <input type="hidden" name="tab" value="arsip">
+    <div class="col-md-5">
+      <label class="form-label">Cari Arsip</label>
+      <div class="input-group input-group-sm">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="text" name="q" class="form-control" placeholder="Nama acara..." value="<?= htmlspecialchars($search) ?>">
+      </div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Level</label>
+      <select name="level" class="form-select form-select-sm">
+        <option value="">Semua Level</option>
+        <?php foreach (['TK','SD','SMP','Umum'] as $lv): ?>
+          <option value="<?= $lv ?>" <?= $filterLevel===$lv?'selected':'' ?>><?= $lv ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="col-md-auto d-flex gap-2">
+      <button class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Filter</button>
+      <a href="?tab=arsip" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x"></i></a>
+    </div>
+  </form>
+</div>
+
+<?php if (empty($arsipEvents)): ?>
+  <div class="empty-state"><i class="bi bi-archive"></i><p>Tidak ada acara selesai.</p></div>
+<?php else: ?>
+<div class="row g-3">
+  <?php foreach ($arsipEvents as $arc): ?>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="badge bg-secondary"><?= $arc['level'] ?></span>
+          <?php if ($arc['is_template']): ?>
+            <span class="badge bg-warning text-dark"><i class="bi bi-bookmark-star me-1"></i>Template</span>
+          <?php endif; ?>
+        </div>
+        <div class="fw-700 fs-13 mb-1"><?= htmlspecialchars($arc['judul']) ?></div>
+        <div class="fs-12 text-muted mb-2">
+          PIC: <?= htmlspecialchars($arc['nama_pic'] ?? '—') ?><br>
+          <?= date('d M Y', strtotime($arc['tanggal_mulai'])) ?>
+          <?= $arc['tanggal_mulai'] !== $arc['tanggal_selesai'] ? ' – ' . date('d M Y', strtotime($arc['tanggal_selesai'])) : '' ?>
+        </div>
+        <div class="d-flex gap-2 fs-12 text-muted mb-3">
+          <span><i class="bi bi-people me-1"></i><?= $arc['jml_panitia'] ?> panitia</span>
+          <span><i class="bi bi-clipboard-check me-1"></i><?= $arc['jml_swot'] ?> evaluasi</span>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="<?= BASE_URL ?>/modules/events/archive.php?id=<?= $arc['id'] ?>" class="btn btn-sm btn-outline-primary flex-grow-1">
+            <i class="bi bi-archive me-1"></i>Lihat Arsip
+          </a>
+          <!-- Toggle template -->
+          <form method="POST" action="<?= BASE_URL ?>/modules/events/archive.php?id=<?= $arc['id'] ?>">
+            <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+            <input type="hidden" name="toggle_template" value="1">
+            <button type="submit" class="btn btn-sm <?= $arc['is_template'] ? 'btn-warning' : 'btn-outline-warning' ?>"
+                    title="<?= $arc['is_template'] ? 'Lepas template' : 'Tandai sebagai template' ?>">
+              <i class="bi bi-bookmark<?= $arc['is_template'] ? '-star-fill' : '-star' ?>"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<?php else: // Tampilkan tab aktif (default) ?>
 
 <!-- Filter -->
 <div class="filter-bar mb-4">
@@ -317,5 +440,7 @@ function getStatusPillClass(string $status, array $map): string {
     </nav>
   <?php endif; ?>
 <?php endif; ?>
+
+<?php endif; // end aktif/arsip tab ?>
 
 <?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>

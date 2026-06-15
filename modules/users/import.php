@@ -46,6 +46,7 @@ if (isset($_GET['download_template'])) {
         ['Sari Dewi',       'sari@sekolah.sch.id',    '082345678901', 'TK',   'Guru TK A',    'staff',      'password'],
         ['Hendra Wijaya',   'hendra@sekolah.sch.id',  '',             'SMP',  'Manager SMP',  'staff',      'password'],
         ['Maya Sekretaris', 'maya2@sekolah.sch.id',   '089876543210', 'Umum', 'Sekretaris',   'staff',      'password'],
+        ['Admin Kegiatan',  'admin@sekolah.sch.id',   '085678901234', 'Umum', 'Admin',         'admin',      'password'],
         ['Admin IT',        'it@sekolah.sch.id',      '',             'IT',   'Admin Sistem',  'superadmin', 'rahasia123'],
     ];
 
@@ -84,7 +85,7 @@ if (isset($_GET['download_template'])) {
         ['no_wa',         'Nomor WhatsApp, format: 08xxxxxxxxxx (opsional)'],
         ['divisi *',      'Tulis divisi yang ada atau baru: ' . $divList . ' (wajib)'],
         ['jabatan',       'Jabatan SDM (opsional)'],
-        ['role_sistem',   'staff (default) atau superadmin'],
+        ['role_sistem',   'staff (default), admin, atau superadmin'],
         ['password',      'Password awal login, default "password" jika kosong'],
         ['', ''],
         ['Catatan:', ''],
@@ -197,6 +198,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file_excel']) && $_F
                 $preview[] = compact('nama','email','no_wa','divisi','jabatan','role','pass','rowErrors','exists','needsUpdate','isNewDivision');
             }
 
+            // PR-02: Save preview to session instead of hidden input
+            $_SESSION['import_preview'] = $preview;
+
             if (empty($preview)) {
                 $errors[] = 'File tidak berisi data. Pastikan data dimulai dari baris ke-2.';
             }
@@ -208,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file_excel']) && $_F
 
 // ── Konfirmasi Import ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_import'])) {
-    $rows = json_decode($_POST['import_data'], true) ?? [];
+    $rows = $_SESSION['import_preview'] ?? [];
     $ok = 0; $skip = 0;
     foreach ($rows as $r) {
         if (!empty($r['rowErrors'])) { $skip++; continue; }
@@ -268,6 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_import'])) {
     }
     $pdo->prepare("INSERT INTO sdm_import_log (filename,total_rows,success_rows,skip_rows,imported_by) VALUES (?,?,?,?,?)")
         ->execute(['Import Excel', count($rows), $ok, $skip, $_SESSION['user_id']]);
+    unset($_SESSION['import_preview']);
     setFlash("Import selesai! $ok SDM berhasil diproses, $skip baris dilewati.", $ok > 0 ? 'success' : 'warning');
     header('Location: ' . BASE_URL . '/modules/users/');
     exit;
@@ -351,7 +356,8 @@ $skipCount  = count($preview) - $validCount;
   <div class="card-header"><i class="bi bi-cloud-upload"></i> Upload File Excel</div>
   <div class="card-body">
     <form method="POST" enctype="multipart/form-data">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
       <div class="mb-3">
         <label class="form-label">Pilih File</label>
         <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls,.csv" required>
@@ -449,8 +455,8 @@ $skipCount  = count($preview) - $validCount;
 <div class="d-flex gap-3 align-items-center flex-wrap">
   <?php if ($validCount > 0): ?>
   <form method="POST">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
-    <input type="hidden" name="import_data" value="<?= htmlspecialchars(json_encode($preview)) ?>">
+
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
     <button type="submit" name="confirm_import" class="btn btn-success btn-lg"
             data-confirm="Import <?= $validCount ?> SDM ke sistem? <?= $skipCount ?> baris akan dilewati.">
       <i class="bi bi-cloud-upload me-2"></i>Import <?= $validCount ?> SDM Sekarang

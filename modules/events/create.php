@@ -12,10 +12,20 @@ if (!hasPermission('buat_acara')) {
 // Ambil daftar SDM aktif untuk dropdown kepanitiaan inti
 $semuaSDM = $pdo->query("SELECT id, nama, divisi, jabatan, jabatan_sistem FROM users WHERE status='aktif' ORDER BY nama")->fetchAll();
 
-// Ambil daftar template (acara yang sudah pernah ada)
+// Ambil daftar template (hanya yang selesai dan ditandai is_template=1)
 $templates = $pdo->query(
-    "SELECT id, judul, level, tanggal_mulai FROM events ORDER BY tanggal_mulai DESC LIMIT 50"
+    "SELECT e.id, e.judul, e.level, e.tanggal_mulai, e.template_notes,
+            (SELECT COUNT(*) FROM event_swot sw WHERE sw.event_id=e.id) AS jml_swot,
+            (SELECT COUNT(*) FROM event_panitia ep WHERE ep.event_id=e.id) AS jml_panitia
+     FROM events e
+     WHERE e.status='selesai' AND e.is_template=1
+     ORDER BY e.tanggal_mulai DESC LIMIT 50"
 )->fetchAll();
+
+// PR-05: Set session access if template_id was chosen (from AJAX check)
+if (!empty($_SESSION['template_access'])) {
+    // already set via ajax_check_template.php
+}
 
 $errors = [];
 $old    = [];   // untuk repopulate form jika ada error
@@ -30,6 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $lokasi      = trim($_POST['lokasi']        ?? '');
     $deskripsi   = trim($_POST['deskripsi']     ?? '');
     $templateId  = ($_POST['template_id'] ?? '') ?: null;
+
+    // PR-05: Grant session access ke archive.php untuk template yang dipilih
+    if ($templateId) {
+        if (!isset($_SESSION['template_access'])) $_SESSION['template_access'] = [];
+        $_SESSION['template_access'][(int)$templateId] = true;
+    }
 
     // Validasi
     if (!$judul)                       $errors[] = 'Nama acara wajib diisi.';
@@ -89,11 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $checklists = $chk->fetchAll();
                 if ($checklists) {
                     $insChk = $pdo->prepare("
-                        INSERT INTO event_checklist (event_id, urutan, item, keterangan)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO event_checklist (event_id, urutan, item)
+                        VALUES (?, ?, ?)
                     ");
                     foreach ($checklists as $c) {
-                        $insChk->execute([$eventId, $c['urutan'], $c['item'], $c['keterangan']]);
+                        $insChk->execute([$eventId, $c['urutan'], $c['item']]);
                     }
                 }
             }
@@ -136,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="row g-3">
   <div class="col-lg-8">
     <form method="POST" class="form-section">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
 
       <!-- Nama Acara -->
       <div class="mb-3">
@@ -155,6 +171,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <option value="<?= $lv ?>" <?= ($old['level'] ?? '') === $lv ? 'selected' : '' ?>><?= $lv ?></option>
           <?php endforeach; ?>
         </select>
+        <div id="levelMismatchHint" class="form-text text-warning d-none mt-1">
+          <i class="bi bi-exclamation-triangle me-1"></i>Level acara ini berbeda dengan level template yang dipilih.
+        </div>
       </div>
 
       <!-- Tanggal -->
@@ -231,64 +250,139 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
   </div>
 
-  <!-- Sidebar: Pilih Template -->
+  <!-- Sidebar: Pilih Template (PR-05) -->
   <div class="col-lg-4">
     <div class="form-section">
-      <h6 class="fw-700 mb-1"><i class="bi bi-files me-2 text-primary"></i>Gunakan Template</h6>
+      <h6 class="fw-700 mb-1"><i class="bi bi-bookmark-star me-2 text-warning"></i>Referensi Template</h6>
       <p class="text-muted small mb-3">
-        Pilih acara tahun lalu untuk meng-clone checklist panitia secara otomatis.
+        Pilih template acara selesai sebagai referensi. Checklist akan di-clone otomatis dan kamu bisa melihat arsipnya.
       </p>
-      <?php if ($templates): ?>
-      <form id="templatePicker">
-        <input type="text" id="templateSearch" class="form-control form-control-sm mb-2"
-               placeholder="Cari acara...">
-        <div style="max-height:300px;overflow-y:auto;">
-          <div class="list-group list-group-flush" id="templateList">
-            <?php foreach ($templates as $t): ?>
-            <label class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-2 px-2 cursor-pointer">
-              <input type="radio" name="template_id" form="mainForm"
-                     value="<?= $t['id'] ?>"
-                     <?= ($old['template_id'] ?? '') == $t['id'] ? 'checked' : '' ?>>
-              <div>
-                <div class="small fw-600"><?= htmlspecialchars($t['judul']) ?></div>
-                <div class="text-muted" style="font-size:.72rem">
-                  <?= $t['level'] ?> &bull; <?= date('Y', strtotime($t['tanggal_mulai'])) ?>
-                </div>
-              </div>
-            </label>
-            <?php endforeach; ?>
+      <?php if (!empty($templates)): ?>
+      <input type="text" id="templateSearch" class="form-control form-control-sm mb-2"
+             placeholder="Cari template..." oninput="filterTemplates(this.value)">
+      <div id="templateCards" style="max-height:380px;overflow-y:auto;">
+        <?php foreach ($templates as $t): ?>
+        <div class="template-card border rounded p-2 mb-2 cursor-pointer"
+             data-id="<?= $t['id'] ?>"
+             data-level="<?= $t['level'] ?>"
+             data-judul="<?= htmlspecialchars(strtolower($t['judul'])) ?>"
+             onclick="selectTemplate(<?= $t['id'] ?>, '<?= htmlspecialchars($t['judul'], ENT_QUOTES) ?>', '<?= $t['level'] ?>')">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="fw-600 fs-13 flex-grow-1 me-2"><?= htmlspecialchars($t['judul']) ?></div>
+            <span class="badge bg-secondary flex-shrink-0"><?= $t['level'] ?></span>
           </div>
+          <div class="fs-12 text-muted mt-1">
+            <?= date('d M Y', strtotime($t['tanggal_mulai'])) ?>
+            &bull; <?= (int)$t['jml_panitia'] ?> panitia
+            &bull; <?= (int)$t['jml_swot'] ?> evaluasi
+          </div>
+          <?php if ($t['template_notes']): ?>
+          <div class="fs-11 text-warning mt-1"><i class="bi bi-info-circle me-1"></i><?= htmlspecialchars(substr($t['template_notes'], 0, 80)) ?></div>
+          <?php endif; ?>
         </div>
-        <button type="button" class="btn btn-link btn-sm text-muted p-0 mt-1"
-                onclick="document.querySelectorAll('input[name=template_id]').forEach(r=>r.checked=false)">
-          Hapus pilihan template
+        <?php endforeach; ?>
+      </div>
+      <div id="selectedTemplateInfo" class="alert alert-success d-none mt-2 py-2 px-3 fs-13">
+        <i class="bi bi-check-circle me-2"></i>
+        <span id="selectedTemplateName"></span>
+        <a href="#" id="selectedTemplateArchiveLink" target="_blank" class="ms-2 fs-12">
+          <i class="bi bi-box-arrow-up-right"></i> Lihat Arsip
+        </a>
+        <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2" onclick="clearTemplate()">
+          ✕ Hapus
         </button>
-      </form>
+      </div>
+      <input type="hidden" name="template_id" id="templateIdInput" value="<?= htmlspecialchars($old['template_id'] ?? '') ?>">
       <?php else: ?>
       <div class="text-center text-muted small py-3">
-        <i class="bi bi-archive d-block mb-1 fs-4"></i>Belum ada acara tersimpan.
+        <i class="bi bi-bookmark-x d-block mb-1 fs-4"></i>
+        Belum ada template tersedia.<br>
+        <span class="fs-11">Admin dapat menandai acara selesai sebagai template di halaman Arsip.</span>
       </div>
       <?php endif; ?>
     </div>
   </div>
 </div>
 
-<?php
-$extraJs = <<<'JS'
 <script>
-// Sinkronisasi radio template ke form utama
-document.querySelectorAll('input[name=template_id]').forEach(r => {
-  r.form = document.querySelector('form[method=POST]');
-});
+// PR-05: Template picker functionality
+const BASE_URL = '<?= BASE_URL ?>';
+let selectedTemplateLevel = null;
 
-// Filter template
-document.getElementById('templateSearch')?.addEventListener('input', function() {
-  const q = this.value.toLowerCase();
-  document.querySelectorAll('#templateList label').forEach(lbl => {
-    lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
+function updateLevelMismatchHint() {
+  const hint = document.getElementById('levelMismatchHint');
+  if (!hint) return;
+  const levelSelect = document.querySelector('select[name="level"]');
+  const currentLevel = levelSelect ? levelSelect.value : '';
+  if (selectedTemplateLevel && currentLevel && currentLevel !== selectedTemplateLevel) {
+    hint.classList.remove('d-none');
+  } else {
+    hint.classList.add('d-none');
+  }
+}
+
+function selectTemplate(id, judul, level) {
+  // Set hidden input
+  document.getElementById('templateIdInput').value = id;
+  selectedTemplateLevel = level;
+
+  // Highlight selected card
+  document.querySelectorAll('.template-card').forEach(c => {
+    c.style.background = '';
+    c.style.borderColor = '';
   });
+  const card = document.querySelector(`.template-card[data-id="${id}"]`);
+  if (card) {
+    card.style.background = '#f0fdf4';
+    card.style.borderColor = '#059669';
+  }
+
+  // Show info
+  document.getElementById('selectedTemplateName').textContent = judul;
+  document.getElementById('selectedTemplateInfo').classList.remove('d-none');
+
+  // Fetch archive link via AJAX (also sets session access)
+  fetch(`${BASE_URL}/modules/events/ajax_check_template.php?id=${id}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.archive_url) {
+        document.getElementById('selectedTemplateArchiveLink').href = data.archive_url;
+      }
+    });
+
+  // Warn jika level acara baru berbeda dengan level template
+  updateLevelMismatchHint();
+}
+
+function clearTemplate() {
+  document.getElementById('templateIdInput').value = '';
+  document.getElementById('selectedTemplateInfo').classList.add('d-none');
+  document.querySelectorAll('.template-card').forEach(c => {
+    c.style.background = '';
+    c.style.borderColor = '';
+  });
+  selectedTemplateLevel = null;
+  updateLevelMismatchHint();
+}
+
+function filterTemplates(q) {
+  q = q.toLowerCase();
+  // Also get currently selected level
+  const levelSelect = document.querySelector('select[name="level"]');
+  const selectedLevel = levelSelect ? levelSelect.value : '';
+
+  document.querySelectorAll('.template-card').forEach(card => {
+    const matchesText = !q || card.dataset.judul.includes(q);
+    const matchesLevel = !selectedLevel || card.dataset.level === selectedLevel;
+    card.style.display = (matchesText && matchesLevel) ? '' : 'none';
+  });
+}
+
+// Auto-filter templates & re-check mismatch hint when level changes
+document.querySelector('select[name="level"]')?.addEventListener('change', function() {
+  filterTemplates(document.getElementById('templateSearch')?.value || '');
+  updateLevelMismatchHint();
 });
 </script>
-JS;
-require_once __DIR__ . '/../../includes/layout/footer.php';
-?>
+
+<?php require_once __DIR__ . '/../../includes/layout/footer.php'; ?>

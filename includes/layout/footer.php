@@ -111,12 +111,14 @@
   let pendingForm = null;
   let pendingHref = null;
   let pendingCb   = null;
+  let pendingEl   = null;
 
   // API publik: bisa dipanggil dari JS manapun
   window.showConfirmModal = function (msg, callback) {
     pendingForm = null;
     pendingHref = null;
     pendingCb   = callback;
+    pendingEl   = null;
     modalMsg.textContent = msg;
     bsModal.show();
   };
@@ -128,6 +130,7 @@
     e.preventDefault();
 
     pendingCb   = null;
+    pendingEl   = el;
     pendingForm = el.closest('form') || null;
     pendingHref = !pendingForm ? (el.getAttribute('href') || null) : null;
 
@@ -140,16 +143,24 @@
     bsModal.hide();
     if (pendingCb)   { pendingCb(); }
     else if (pendingForm) {
+      // form.submit() tidak menyertakan name/value button — inject sebagai hidden input
+      if (pendingEl && pendingEl.name) {
+        const hidden = document.createElement('input');
+        hidden.type  = 'hidden';
+        hidden.name  = pendingEl.name;
+        hidden.value = pendingEl.value ?? '';
+        pendingForm.appendChild(hidden);
+      }
       pendingForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: false }));
       pendingForm.submit();
     }
     else if (pendingHref) { window.location.href = pendingHref; }
-    pendingForm = pendingHref = pendingCb = null;
+    pendingForm = pendingHref = pendingCb = pendingEl = null;
   });
 
   // Reset saat modal ditutup via Batal / X
   modalEl.addEventListener('hidden.bs.modal', function () {
-    pendingForm = pendingHref = pendingCb = null;
+    pendingForm = pendingHref = pendingCb = pendingEl = null;
   });
 })();
 </script>

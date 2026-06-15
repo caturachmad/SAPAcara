@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
   <div class="card-header"><i class="bi bi-upload"></i> Upload File Baru</div>
   <div class="card-body">
     <form method="POST" enctype="multipart/form-data" class="row g-3">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
       <div class="col-12">
         <label class="form-label">File <span class="text-danger">*</span></label>
         <input type="file" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.zip,.rar" required>

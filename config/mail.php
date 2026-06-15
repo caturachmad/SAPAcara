@@ -2,7 +2,7 @@
 define('MAIL_HOST',      'smtp.gmail.com');
 define('MAIL_PORT',      587);
 define('MAIL_USERNAME',  'wiwid8a@gmail.com');  // ← ganti
-define('MAIL_PASSWORD',  'zbzg zjzw qlkn wchd');     // ← App Password Gmail
+define('MAIL_PASSWORD',  'zbzgzjzwqlknwchd');     // ← App Password Gmail (tanpa spasi)
 define('MAIL_FROM',      'wiwid8a@gmail.com');  // ← ganti
 define('MAIL_FROM_NAME', 'SAPAcara – Manajemen Acara Sekolah');
 define('APP_NAME',       'SAPAcara');
@@ -26,11 +26,14 @@ function sendMail(string $to, string $toName, string $subject, string $html): bo
         $mail->Body    = $html;
         $mail->AltBody = strip_tags($html);
         $mail->send();
+        $GLOBALS['last_mail_error'] = '';
         return true;
     } catch (Exception $e) {
-        error_log('[SAPAcara Mail Error] ' . $mail->ErrorInfo . ' / ' . $e->getMessage());
+        $GLOBALS['last_mail_error'] = $mail->ErrorInfo ?: $e->getMessage();
+        error_log('[SAPAcara Mail Error] ' . $GLOBALS['last_mail_error']);
         if (sendMailFallback($to, $toName, $subject, $html)) {
             error_log('[SAPAcara Mail Fallback] Sent using PHP mail() fallback to ' . $to);
+            $GLOBALS['last_mail_error'] = '';
             return true;
         }
         return false;

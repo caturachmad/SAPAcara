@@ -26,36 +26,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($apRow && $isActionable && in_array($action, ['approved','rejected'])) {
-        $pdo->prepare("UPDATE approvals SET status=?, catatan=?, approved_at=NOW() WHERE id=?")
-            ->execute([$action, $catatan, $approvalId]);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("UPDATE approvals SET status=?, catatan=?, approved_at=NOW() WHERE id=?")
+                ->execute([$action, $catatan, $approvalId]);
 
-        // Update status event
-        if ($action === 'approved') {
-            $nextStatus = [
-                'manager_tk'      => 'disetujui_manager',
-                'manager_sd'      => 'disetujui_manager',
-                'manager_smp'     => 'disetujui_manager',
-                'sekretaris'      => 'proposal_dibuat',
-                'bendahara'       => 'rab_diajukan',
-                'kehumasan'       => 'perijinan',
-                'kepala_sekolah'  => 'disetujui',
-            ][$apRow['tipe_approver']] ?? null;
-            if ($nextStatus) {
-              $pdo->prepare("UPDATE events SET status=? WHERE id=?")
-                ->execute([$nextStatus, $apRow['event_id']]);
+            // Update status event
+            if ($action === 'approved') {
+                $nextStatus = [
+                    'manager_tk'      => 'disetujui_manager',
+                    'manager_sd'      => 'disetujui_manager',
+                    'manager_smp'     => 'disetujui_manager',
+                    'sekretaris'      => 'proposal_dibuat',
+                    'bendahara'       => 'rab_diajukan',
+                    'kehumasan'       => 'perijinan',
+                    'kepala_sekolah'  => 'disetujui',
+                ][$apRow['tipe_approver']] ?? null;
+                if ($nextStatus) {
+                    $pdo->prepare("UPDATE events SET status=? WHERE id=?")
+                        ->execute([$nextStatus, $apRow['event_id']]);
+                }
+                // jika tidak ada lagi approval pending untuk event ini, mark final status if applicable
+                $left = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE event_id=? AND status='pending'");
+                $left->execute([$apRow['event_id']]);
+                if ((int)$left->fetchColumn() === 0) {
+                    // jika semua approval selesai, set event status ke 'disetujui' jika belum diatur
+                    $pdo->prepare("UPDATE events SET status = 'disetujui' WHERE id = ? AND status NOT IN ('selesai','ditolak')")->execute([$apRow['event_id']]);
+                }
+            } else {
+                $pdo->prepare("UPDATE events SET status='ditolak' WHERE id=?")->execute([$apRow['event_id']]);
             }
-            // jika tidak ada lagi approval pending untuk event ini, mark final status if applicable
-            $left = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE event_id=? AND status='pending'");
-            $left->execute([$apRow['event_id']]);
-            if ((int)$left->fetchColumn() === 0) {
-              // jika semua approval selesai, set event status ke 'disetujui' jika belum diatur
-              $pdo->prepare("UPDATE events SET status = 'disetujui' WHERE id = ? AND status NOT IN ('selesai','ditolak')")->execute([$apRow['event_id']]);
-            }
-        } else {
-            $pdo->prepare("UPDATE events SET status='ditolak' WHERE id=?")->execute([$apRow['event_id']]);
+
+            $pdo->commit();
+            setFlash('Keputusan approval berhasil disimpan.', 'success');
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            setFlash('Terjadi kesalahan sistem.', 'danger');
         }
-
-        setFlash('Keputusan approval berhasil disimpan.', 'success');
     }
     header('Location: ?'); exit;
 }

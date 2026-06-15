@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !$sudahIsi) {
   <?php if ($eval['deskripsi']): ?><div class="alert alert-info mb-4"><?= nl2br(htmlspecialchars($eval['deskripsi'])) ?></div><?php endif; ?>
   <?php if (!empty($errors)): ?><div class="alert alert-danger mb-3"><?php foreach($errors as $e) echo "<div>• $e</div>"; ?></div><?php endif; ?>
   <form method="POST" class="card" style="max-width:680px">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
     <div class="card-body">
       <?php foreach ($pertanyaan as $i => $p):
         $opsi = $p['opsi'] ? json_decode($p['opsi'],true) : [];

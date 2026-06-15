@@ -37,7 +37,7 @@ $stmtPan->execute([$uid]); $asPanitia = $stmtPan->fetchAll();
 
 /* ── Approval pending user ini (superadmin) ── */
 $myApproval = 0;
-if ($role === 'superadmin') {
+if ($role === 'superadmin' || $role === 'admin') {
     $ap = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE approver_id=? AND status='pending'");
     $ap->execute([$uid]); $myApproval = (int)$ap->fetchColumn();
 }
@@ -183,6 +183,143 @@ $allEvents = $pdo->query("
   <?php endforeach; ?>
 </div>
 <?php endif; ?>
+
+<!-- ══════════════════════════════════════════
+     ADMIN VIEW
+     ══════════════════════════════════════════ -->
+<?php elseif ($role === 'admin'): ?>
+
+<!-- Role Banner -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div>
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="badge bg-primary py-1 px-2">Admin</span>
+      <span class="fs-12 text-muted">Akses administrasi</span>
+    </div>
+    <h5 class="fw-800 mb-0">Halo, <?= htmlspecialchars(explode(' ',$user['nama'])[0]) ?>! 👋</h5>
+    <div class="fs-12 text-muted"><?= date('l, d F Y') ?></div>
+  </div>
+  <a href="<?= BASE_URL ?>/modules/events/create.php" class="btn btn-primary">
+    <i class="bi bi-plus-circle me-1"></i> Buat Acara Baru
+  </a>
+</div>
+
+<?php if ($myApproval > 0): ?>
+<!-- Approval pending badge -->
+<div class="alert alert-warning d-flex align-items-center gap-3 mb-4">
+  <i class="bi bi-bell-fill fs-4 flex-shrink-0"></i>
+  <div class="flex-grow-1">
+    <div class="fw-700">Kamu memiliki <strong><?= $myApproval ?> approval</strong> yang menunggu keputusanmu.</div>
+    <div class="fs-12 text-muted">Buka halaman Approval untuk meninjau dan memberikan keputusan.</div>
+  </div>
+  <a href="<?= BASE_URL ?>/modules/approvals/" class="btn btn-warning btn-sm flex-shrink-0">
+    <i class="bi bi-check2-circle me-1"></i> Lihat Approval
+  </a>
+</div>
+<?php endif; ?>
+
+<!-- Acara sebagai PIC dan panitia -->
+<div class="row g-4">
+  <!-- Sebagai PIC -->
+  <div class="col-lg-6">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h6 class="fw-800 mb-0"><i class="bi bi-person-badge me-2 text-primary"></i>Acara yang Saya Pimpin</h6>
+        <div class="fs-12 text-muted">Kamu adalah PIC acara ini</div>
+      </div>
+      <?php if (!empty($asPIC)): ?><span class="badge bg-primary"><?= count($asPIC) ?></span><?php endif; ?>
+    </div>
+    <?php if (empty($asPIC)): ?>
+      <div class="card border-dashed">
+        <div class="card-body text-center py-4">
+          <i class="bi bi-plus-circle-dotted fs-2 text-muted d-block mb-2 opacity-50"></i>
+          <p class="text-muted fs-13 mb-3">Kamu belum memimpin acara apapun</p>
+          <a href="<?= BASE_URL ?>/modules/events/create.php" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus me-1"></i> Buat Acara Baru
+          </a>
+        </div>
+      </div>
+    <?php else: ?>
+      <div class="d-flex flex-column gap-3">
+        <?php foreach ($asPIC as $ev): ?>
+        <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= $ev['id'] ?>"
+           class="card text-decoration-none text-dark border-start border-primary border-3"
+           onmouseover="this.style.transform='translateX(4px)';this.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'"
+           onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div class="card-body py-3">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+              <div class="flex-grow-1">
+                <div class="fw-700"><?= htmlspecialchars($ev['judul']) ?></div>
+                <div class="fs-12 text-muted mt-1">
+                  <i class="bi bi-calendar3 me-1"></i><?= date('d M Y',strtotime($ev['tanggal_mulai'])) ?>
+                  · <span class="badge bg-secondary"><?= $ev['level'] ?></span>
+                </div>
+              </div>
+              <div class="text-end flex-shrink-0">
+                <?= hariChip((int)$ev['hari_lagi']) ?>
+                <div class="mt-1">
+                  <span class="status-pill <?= match($ev['status']) {
+                    'berlangsung'=>'s-berlangsung','disetujui'=>'s-disetujui',
+                    'pengajuan','disetujui_manager','proposal_dibuat','rab_diajukan','perijinan'=>'s-pengajuan',
+                    default=>'s-draft'
+                  } ?>"><?= $statusLabel[$ev['status']] ?></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </a>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Sebagai Panitia -->
+  <div class="col-lg-6">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h6 class="fw-800 mb-0"><i class="bi bi-people-fill me-2 text-success"></i>Acara yang Saya Ikuti</h6>
+        <div class="fs-12 text-muted">Terdaftar sebagai panitia</div>
+      </div>
+      <?php if (!empty($asPanitia)): ?><span class="badge bg-success"><?= count($asPanitia) ?></span><?php endif; ?>
+    </div>
+    <?php if (empty($asPanitia)): ?>
+      <div class="card border-dashed">
+        <div class="card-body text-center py-4">
+          <i class="bi bi-people fs-2 text-muted d-block mb-2 opacity-50"></i>
+          <p class="text-muted fs-13">Belum terdaftar sebagai panitia acara manapun.</p>
+        </div>
+      </div>
+    <?php else: ?>
+      <div class="d-flex flex-column gap-3">
+        <?php foreach ($asPanitia as $ev):
+          $kc = ['pending'=>['warning','⏳ Konfirmasi'],'bersedia'=>['success','✅ Bersedia'],'tidak_bisa'=>['danger','❌ Tidak Bisa']];
+          [$badgeC, $badgeL] = $kc[$ev['status_konfirmasi']] ?? ['secondary','?'];
+        ?>
+        <a href="<?= BASE_URL ?>/modules/events/workspace.php?id=<?= $ev['id'] ?>"
+           class="card text-decoration-none text-dark border-start border-<?= $badgeC ?> border-3"
+           onmouseover="this.style.transform='translateX(4px)';this.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'"
+           onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="flex-grow-1">
+                <div class="fw-700"><?= htmlspecialchars($ev['judul']) ?></div>
+                <div class="fs-12 text-muted mt-1">
+                  <?php if ($ev['bagian']): ?><span class="badge bg-light text-dark border me-1"><?= htmlspecialchars($ev['bagian']) ?></span><?php endif; ?>
+                  <i class="bi bi-calendar3 me-1"></i><?= date('d M Y',strtotime($ev['tanggal_mulai'])) ?>
+                </div>
+              </div>
+              <div class="text-end flex-shrink-0">
+                <?= hariChip((int)$ev['hari_lagi']) ?>
+                <div class="mt-1"><span class="badge bg-<?= $badgeC ?>"><?= $badgeL ?></span></div>
+              </div>
+            </div>
+          </div>
+        </a>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════
      PIC / STAFF VIEW

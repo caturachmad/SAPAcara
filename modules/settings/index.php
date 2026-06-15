@@ -1,14 +1,19 @@
 <?php
 declare(strict_types=1);
 
-$pageTitle = 'Pengaturan Sistem';
-require_once __DIR__ . '/../../includes/layout/header.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../includes/auth.php';
+requireLogin();
 
-// Hanya superadmin (atau admin dengan izin pengaturan_sistem) yang boleh akses
+// Guard SEBELUM header.php agar redirect bisa berjalan (headers belum terkirim)
 if (!hasPermission('pengaturan_sistem')) {
+    setFlash('Anda tidak memiliki izin mengakses halaman ini.', 'danger');
     header('Location: ' . BASE_URL . '/modules/dashboard/select.php');
     exit;
 }
+
+$pageTitle = 'Pengaturan Sistem';
+require_once __DIR__ . '/../../includes/layout/header.php';
 
 // ── Definisi fitur untuk permission matrix ────────────────────────────────────
 $featureList = [
@@ -121,7 +126,7 @@ $flash     = getFlash();
 <div class="card shadow-sm border-0">
   <div class="card-body p-4">
     <form method="POST">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
       <input type="hidden" name="save_settings" value="1">
 
       <h6 class="fw-700 mb-3 text-uppercase" style="font-size:.75rem;letter-spacing:.08em;color:#64748b;">
@@ -202,7 +207,7 @@ $flash     = getFlash();
 </div>
 
 <form method="POST">
-          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
   <input type="hidden" name="save_permissions" value="1">
   <div class="card shadow-sm border-0">
     <div class="table-responsive">
