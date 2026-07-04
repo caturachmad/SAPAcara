@@ -70,19 +70,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['undang'])) {
                 $sdmUser = $sdmData->fetch();
 
                 if ($sdmUser) {
-                    $roleName = $bagian ?: 'Panitia';
-                    $html = mailTemplatePanitia($sdmUser, $ev, $roleName, $token);
-                    $sent = sendMail($sdmUser['email'], $sdmUser['nama'], 'Undangan Panitia: ' . $ev['judul'], $html);
-                    // Notif in-app selalu dikirim, terlepas dari status email
-                    addNotif($pdo, $uid2, 'Undangan Panitia',
-                        "Kamu diundang menjadi panitia acara {$ev['judul']}",
-                        BASE_URL . '/modules/events/workspace.php?id=' . $eventId, 'info');
-                    if (!$sent) {
-                        $failedEmails[] = $sdmUser['email'];
-                        if (!$smtpLastError && !empty($GLOBALS['last_mail_error'])) {
-                            $smtpLastError = $GLOBALS['last_mail_error'];
-                        }
-                    }
+                  $roleName = $bagian ?: 'Panitia';
+                  $html = mailTemplatePanitia($sdmUser, $ev, $roleName, $token);
+                  // Enqueue email to mail_queue for asynchronous sending
+                  $ins = $pdo->prepare("INSERT INTO mail_queue (to_email,to_name,subject,body_html,status,attempts,created_at) VALUES (?,?,?,?, 'queued', 0, NOW())");
+                  $ins->execute([$sdmUser['email'], $sdmUser['nama'], 'Undangan Panitia: ' . $ev['judul'], $html]);
+                  // Notif in-app selalu dikirim, terlepas dari status email
+                  addNotif($pdo, $uid2, 'Undangan Panitia',
+                    "Kamu diundang menjadi panitia acara {$ev['judul']}",
+                    BASE_URL . '/modules/events/workspace.php?id=' . $eventId, 'info');
                 }
                 $ok++;
             } catch (\Exception $e) {

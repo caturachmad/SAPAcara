@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 // Tidak pakai header.php — login adalah halaman standalone
-if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../../config/db.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../config/RateLimiter.php';
 
@@ -55,6 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $limiter->recordAttempt($identifier, true);
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $u['id'];
+                // Remove sensitive fields before storing user in session
+                if (isset($u['password'])) unset($u['password']);
                 $_SESSION['user']    = $u;
                 // Load permission role ke session agar hasPermission() tidak perlu
                 // query DB setiap request. Cache ini di-refresh saat settings diubah.

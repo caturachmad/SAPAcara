@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
-if (session_status()===PHP_SESSION_NONE) session_start();
 requireLogin();
 
 $id = (int)($_GET['id'] ?? 0);
@@ -326,7 +325,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
         </a>
         <div>
           <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-            <span class="badge bg-light text-dark"><?= $ev['level'] ?></span>
+            <span class="badge bg-light text-dark"><?= htmlspecialchars($ev['level']) ?></span>
             <span class="badge bg-warning text-dark">
               <?= $myRole ? ($myRole['peran_acara']==='pic' ? 'PIC' : ($myRole['is_event_admin'] ? 'Panitia Inti' : 'Panitia Biasa')) : 'Viewer' ?>
             </span>
@@ -471,7 +470,7 @@ if ($isPic && !in_array($ev['status'], ['selesai','ditolak'])):
             <tr><th class="text-muted pe-3" width="120">PIC</th><td class="fw-600"><?= htmlspecialchars($ev['nama_pic']??'—') ?></td></tr>
             <tr><th class="text-muted">Tanggal</th><td><?= date('d M Y', strtotime($ev['tanggal_mulai'])) ?><?= $ev['tanggal_mulai'] !== $ev['tanggal_selesai'] ? ' s/d ' . date('d M Y', strtotime($ev['tanggal_selesai'])) : '' ?></td></tr>
             <tr><th class="text-muted">Lokasi</th><td><?= htmlspecialchars($ev['lokasi'] ?? '—') ?></td></tr>
-            <tr><th class="text-muted">Level</th><td><span class="badge bg-secondary"><?= $ev['level'] ?></span></td></tr>
+            <tr><th class="text-muted">Level</th><td><span class="badge bg-secondary"><?= htmlspecialchars($ev['level']) ?></span></td></tr>
             <tr><th class="text-muted">Total Panitia</th><td><?= count($panitia) ?> orang</td></tr>
           </table>
           <?php if ($ev['deskripsi'] ?? ''): ?>
@@ -497,7 +496,7 @@ if ($isPic && !in_array($ev['status'], ['selesai','ditolak'])):
             <div class="flex-grow-1 overflow-hidden">
               <div class="fw-700 fs-13">📎 Referensi Template</div>
               <div class="text-truncate fs-12 text-muted"><?= htmlspecialchars($tmplEv['judul']) ?></div>
-              <div class="fs-12 text-muted"><?= $tmplEv['level'] ?> &bull; <?= date('d M Y', strtotime($tmplEv['tanggal_mulai'])) ?></div>
+              <div class="fs-12 text-muted"><?= htmlspecialchars($tmplEv['level']) ?> &bull; <?= date('d M Y', strtotime($tmplEv['tanggal_mulai'])) ?></div>
             </div>
             <a href="<?= BASE_URL ?>/modules/events/archive.php?id=<?= $tmplEv['id'] ?>"
                target="_blank" class="btn btn-sm btn-warning flex-shrink-0">

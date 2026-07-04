@@ -1,4 +1,6 @@
 <?php
+// Ensure .env and session cookie params are loaded before starting session
+require_once __DIR__ . '/../..' . '/config/db.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 // ── Sesi & login ─────────────────────────────────────────────────────────────

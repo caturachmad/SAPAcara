@@ -48,6 +48,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Validasi
+    // Whitelist server-side untuk mencegah payload manipulasi (XSS via level)
+    $ALLOWED_LEVELS = ['TK','SD','SMP','Umum'];
+    if (!in_array($level, $ALLOWED_LEVELS, true)) {
+      $errors[] = 'Level tidak valid.';
+    }
     if (!$judul)                       $errors[] = 'Nama acara wajib diisi.';
     if (!$level)                       $errors[] = 'Level wajib dipilih.';
     if (!$tgl_mulai)                   $errors[] = 'Tanggal mulai wajib diisi.';
@@ -124,8 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } catch (Exception $e) {
-            $pdo->rollBack();
-            $errors[] = 'Terjadi kesalahan sistem: ' . $e->getMessage();
+          $pdo->rollBack();
+          error_log('[events/create] ' . $e->getMessage());
+          $errors[] = 'Terjadi kesalahan sistem. Silakan coba lagi atau hubungi administrator.';
         }
     }
 }

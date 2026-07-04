@@ -38,7 +38,7 @@ if ($jawab === 'bersedia' && !isset($_GET['confirm']) && $_SERVER['REQUEST_METHO
         <div class="p-4">
           <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px;border-left:4px solid #10b981">
             <strong><?= htmlspecialchars($row['judul']) ?></strong><br>
-            <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= $row['level'] ?></small>
+            <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= htmlspecialchars($row['level']) ?></small>
           </div>
           <p>Kamu akan mengonfirmasi bahwa kamu bersedia menjadi panitia untuk acara ini.</p>
           <div class="d-flex gap-2 mb-3">
@@ -69,7 +69,7 @@ if ($jawab === 'tidak_bisa' && $_SERVER['REQUEST_METHOD']!=='POST') {
         <div class="p-4">
           <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px;border-left:4px solid #ef4444">
             <strong><?= htmlspecialchars($row['judul']) ?></strong><br>
-            <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= $row['level'] ?></small>
+            <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= htmlspecialchars($row['level']) ?></small>
           </div>
           <form method="POST">
           <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
@@ -126,7 +126,7 @@ $pesan = $jawab==='bersedia' ? 'Kamu telah dikonfirmasi sebagai panitia acara in
       <p style="color:#64748b;margin-bottom:20px"><?= $pesan ?></p>
       <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px;text-align:left;border-left:4px solid <?= $warna ?>">
         <strong><?= htmlspecialchars($row['judul']) ?></strong><br>
-        <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= $row['level'] ?></small>
+        <small class="text-muted">📅 <?= date('d M Y', strtotime($row['tanggal_mulai'])) ?> · <?= htmlspecialchars($row['level']) ?></small>
       </div>
 
       <?php if ($jawab==='bersedia' && $row['wa_group_link']): ?>
