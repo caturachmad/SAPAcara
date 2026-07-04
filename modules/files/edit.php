@@ -154,7 +154,7 @@ $previewUrl = BASE_URL . '/modules/files/preview.php?id=' . $id;
       </div>
       <div class="card-body">
         <form method="POST" enctype="multipart/form-data" class="row g-3">
-          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
           <input type="hidden" name="id" value="<?= $id ?>">
 
           <div class="col-12">

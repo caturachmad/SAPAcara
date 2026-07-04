@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="row g-3">
   <div class="col-lg-8">
     <form method="POST" class="form-section">
-          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
 
       <!-- Nama Acara -->
       <div class="mb-3">
@@ -171,9 +171,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <option value="<?= $lv ?>" <?= ($old['level'] ?? '') === $lv ? 'selected' : '' ?>><?= $lv ?></option>
           <?php endforeach; ?>
         </select>
-        <div id="levelMismatchHint" class="form-text text-warning d-none mt-1">
-          <i class="bi bi-exclamation-triangle me-1"></i>Level acara ini berbeda dengan level template yang dipilih.
-        </div>
       </div>
 
       <!-- Tanggal -->
@@ -307,24 +304,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script>
 // PR-05: Template picker functionality
 const BASE_URL = '<?= BASE_URL ?>';
-let selectedTemplateLevel = null;
-
-function updateLevelMismatchHint() {
-  const hint = document.getElementById('levelMismatchHint');
-  if (!hint) return;
-  const levelSelect = document.querySelector('select[name="level"]');
-  const currentLevel = levelSelect ? levelSelect.value : '';
-  if (selectedTemplateLevel && currentLevel && currentLevel !== selectedTemplateLevel) {
-    hint.classList.remove('d-none');
-  } else {
-    hint.classList.add('d-none');
-  }
-}
 
 function selectTemplate(id, judul, level) {
   // Set hidden input
   document.getElementById('templateIdInput').value = id;
-  selectedTemplateLevel = level;
 
   // Highlight selected card
   document.querySelectorAll('.template-card').forEach(c => {
@@ -350,8 +333,13 @@ function selectTemplate(id, judul, level) {
       }
     });
 
-  // Warn jika level acara baru berbeda dengan level template
-  updateLevelMismatchHint();
+  // Auto-filter: if level select has value already set that doesn't match, warn
+  const levelSelect = document.querySelector('select[name="level"]');
+  if (levelSelect && levelSelect.value && levelSelect.value !== level) {
+    // show hint
+    const hint = document.getElementById('levelMismatchHint');
+    if (hint) hint.classList.remove('d-none');
+  }
 }
 
 function clearTemplate() {
@@ -361,8 +349,6 @@ function clearTemplate() {
     c.style.background = '';
     c.style.borderColor = '';
   });
-  selectedTemplateLevel = null;
-  updateLevelMismatchHint();
 }
 
 function filterTemplates(q) {
@@ -378,10 +364,9 @@ function filterTemplates(q) {
   });
 }
 
-// Auto-filter templates & re-check mismatch hint when level changes
+// Auto-filter templates when level changes
 document.querySelector('select[name="level"]')?.addEventListener('change', function() {
   filterTemplates(document.getElementById('templateSearch')?.value || '');
-  updateLevelMismatchHint();
 });
 </script>
 

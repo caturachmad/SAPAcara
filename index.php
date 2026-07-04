@@ -16,6 +16,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_user'])) {
                ? $_POST['jabatan_sistem'] : 'staff';
 
     if ($tid !== 1 || $roleS === 'superadmin') {
+        $oldRowStmt = $pdo->prepare("SELECT role_sistem, jabatan_sistem FROM users WHERE id=?");
+        $oldRowStmt->execute([$tid]);
+        $oldRow = $oldRowStmt->fetch();
+
         $params = [$nama, $email, $divisi, $jabatan, $roleS, $jabatanS];
         $sql = "UPDATE users SET nama=?, email=?, divisi=?, jabatan=?, role_sistem=?, jabatan_sistem=?";
         if (isset($_POST['reset_password'])) {
@@ -25,6 +29,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_user'])) {
         $sql .= " WHERE id=?";
         $params[] = $tid;
         $pdo->prepare($sql)->execute($params);
+
+        if ($oldRow) {
+            if ($oldRow['role_sistem'] !== $roleS) {
+                logAudit($pdo, $uid, $tid, 'update', 'role_sistem', $oldRow['role_sistem'], $roleS);
+            }
+            if ($oldRow['jabatan_sistem'] !== $jabatanS) {
+                logAudit($pdo, $uid, $tid, 'update', 'jabatan_sistem', $oldRow['jabatan_sistem'], $jabatanS);
+            }
+        }
+        if (isset($_POST['reset_password'])) {
+            logAudit($pdo, $uid, $tid, 'update', 'password', null, '(direset ke default)');
+        }
+
         setFlash('Data SDM berhasil diperbarui.', 'success');
     }
     header('Location: ?'); exit;
@@ -44,12 +61,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
                     ->execute($ids);
                 $pdo->prepare("DELETE FROM users WHERE id IN ($placeholders)")
                     ->execute($ids);
+                foreach ($ids as $delId) {
+                    logAudit($pdo, $uid, (int)$delId, 'bulk_delete');
+                }
                 setFlash('SDM terpilih berhasil dihapus.', 'success');
             } elseif ($_POST['bulk_action_type'] === 'divisi') {
                 $divisi = trim($_POST['bulk_divisi'] ?? '');
                 if ($divisi) {
                     $pdo->prepare("UPDATE users SET divisi=? WHERE id IN ($placeholders)")
                         ->execute(array_merge([$divisi], $ids));
+                    foreach ($ids as $divId) {
+                        logAudit($pdo, $uid, (int)$divId, 'bulk_update', 'divisi', null, $divisi);
+                    }
                     setFlash('Divisi SDM terpilih diperbarui.', 'success');
                 }
             }
@@ -71,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tambah_user'])) {
     try {
         $pdo->prepare("INSERT INTO users (nama,email,password,divisi,jabatan,no_wa,role_sistem,jabatan_sistem) VALUES (?,?,?,?,?,?,?,?)")
             ->execute([$nama,$email,$pass,$divisi,$jabatan,$no_wa,$roleS,$jabatanS]);
+        logAudit($pdo, $uid, (int)$pdo->lastInsertId(), 'create', null, null, "$nama ($email)");
         setFlash("SDM $nama berhasil ditambahkan.", 'success');
     } catch (\Exception $e) { setFlash('Email sudah terdaftar.', 'danger'); }
     header('Location: ?'); exit;
@@ -83,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete']) && is_numer
         $pdo->prepare("DELETE FROM event_panitia WHERE user_id=?")->execute([$tid]);
         $pdo->prepare("DELETE FROM notifications WHERE user_id=?")->execute([$tid]);
         $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$tid]);
+        logAudit($pdo, $uid, $tid, 'delete');
         setFlash('SDM berhasil dihapus.', 'success');
     }
     header('Location: ?'); exit;

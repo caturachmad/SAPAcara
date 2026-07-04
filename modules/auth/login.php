@@ -5,6 +5,7 @@ declare(strict_types=1);
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../config/RateLimiter.php';
 
 // Kalau sudah login → langsung ke beranda
 if (isLoggedIn()) {
@@ -32,7 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email    = trim($_POST['email']    ?? '');
     $password =       $_POST['password'] ?? '';
 
-    if (!$email || !$password) {
+    $limiter    = new RateLimiter($pdo);
+    $identifier = ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . '|' . strtolower($email);
+
+    if ($limiter->isBlocked($identifier)) {
+        $retryAfter = $limiter->getRetryAfterSeconds($identifier);
+        $error = "Terlalu banyak percobaan login gagal. Coba lagi dalam {$retryAfter} detik.";
+    } elseif (!$email || !$password) {
         $error = 'Email dan password wajib diisi.';
     } else {
         $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND status = 'aktif' LIMIT 1");
@@ -45,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = $maintenanceMsgRow ?: 'Sistem sedang dalam pemeliharaan.';
                 $error = '🔧 ' . $msg;
             } else {
+                $limiter->recordAttempt($identifier, true);
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $u['id'];
                 $_SESSION['user']    = $u;
@@ -55,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         } else {
+            $limiter->recordAttempt($identifier, false);
             $error = 'Email atau password salah.';
         }
     }

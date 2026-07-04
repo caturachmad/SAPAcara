@@ -55,6 +55,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
     $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowedExt)) $errors[] = 'Tipe file tidak didukung.';
 
+    // Validasi isi file (MIME type asli + magic bytes) — cegah file
+    // berbahaya yang di-rename supaya lolos cek extension di atas.
+    if (empty($errors) && !empty($f['tmp_name'])) {
+        require_once __DIR__ . '/../../includes/FileUploader.php';
+        foreach (FileUploader::validateContent($f['tmp_name'], $ext) as $ce) {
+            $errors[] = $ce;
+        }
+    }
+
     // Batasi dokumen yang hanya boleh dikirim setelah approval manager
     $restricted = ['rab','perijinan'];
     if (in_array($type, $restricted) && !in_array($ev['status'], ['disetujui_manager','disetujui','berlangsung'])) {
@@ -64,10 +73,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['file'])) {
     if (empty($errors)) {
         $dir = __DIR__ . '/../../uploads/events/' . $eventId . '/';
         if (!is_dir($dir)) {
-          if (!mkdir($dir, 0777, true)) {
+          // 0755 (bukan 0777) — folder tidak perlu writable oleh "others",
+          // cukup oleh owner/group proses web server.
+          if (!mkdir($dir, 0755, true)) {
             $errors[] = 'Gagal membuat direktori upload. Periksa permission pada folder uploads/.';
           } else {
-            chmod($dir, 0777);
+            chmod($dir, 0755);
           }
         }
         if (empty($errors) && (!is_dir($dir) || !is_writable($dir))) {

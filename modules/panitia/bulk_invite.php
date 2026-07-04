@@ -218,7 +218,9 @@ foreach ($sdmList as $s) {
 <?php endif; ?>
 
 <form method="POST" id="bulkForm">
-  <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+  <?php if (function_exists('csrfToken')): ?>
+    <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+  <?php endif; ?>
   <input type="hidden" name="event_id" value="<?= $eventId ?>">
 
   <!-- ── Sticky action bar ── -->

@@ -115,7 +115,7 @@ $canSubmitToManager = $ev['status'] === 'draft' && $proposalDocsCount > 0 && !$h
   <span class="badge-status status-<?= $ev['status'] ?>"><?= $statusLabel[$ev['status']] ?? $ev['status'] ?></span>
   <?php if (isPIC($id, $pdo) && $ev['status'] === 'draft' && !$hasPendingManagerApproval): ?>
     <form method="POST" class="ms-3">
-          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
       <button type="submit" name="submit_to_manager" value="1" class="btn btn-sm btn-warning" <?= $proposalDocsCount === 0 ? 'disabled' : '' ?>>
         <i class="bi bi-send-plus me-1"></i> Ajukan ke <?= htmlspecialchars($nextApprover) ?>
       </button>

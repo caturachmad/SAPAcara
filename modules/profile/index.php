@@ -97,7 +97,7 @@ $riwayat->execute([$uid]); $riwayatList = $riwayat->fetchAll();
       <div class="card-header"><i class="bi bi-pencil me-2"></i>Edit Profil</div>
       <div class="card-body">
         <form method="POST" class="row g-3">
-          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Nama Lengkap</label>
             <input type="text" name="nama" class="form-control" value="<?= htmlspecialchars($me['nama']) ?>" required>
@@ -129,7 +129,7 @@ $riwayat->execute([$uid]); $riwayatList = $riwayat->fetchAll();
       <div class="card-header"><i class="bi bi-lock me-2"></i>Ganti Password</div>
       <div class="card-body">
         <form method="POST" class="row g-3">
-          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <?php if(function_exists('csrfToken')): ?><input type="hidden" name="csrf_token" value="<?= csrfToken() ?>"><?php endif; ?>
           <div class="col-12">
             <label class="form-label fw-semibold">Password Lama</label>
             <input type="password" name="password_lama" class="form-control" required>

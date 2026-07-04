@@ -148,3 +148,31 @@ function countUnreadNotif(PDO $pdo, int $userId): int {
     $stmt->execute([$userId]);
     return (int)$stmt->fetchColumn();
 }
+
+// ── Audit log (data SDM) ────────────────────────────────────────────────────
+//
+// Dipanggil dari modules/users/index.php (dan index.php root) setiap ada
+// perubahan data user. Tabel audit_logs harus sudah dibuat lewat
+// database/migration_audit_logs.sql.
+function logAudit(
+    PDO $pdo,
+    int $actorId,
+    int $targetId,
+    string $action,
+    ?string $fieldChanged = null,
+    ?string $oldValue = null,
+    ?string $newValue = null
+): void {
+    try {
+        $pdo->prepare(
+            "INSERT INTO audit_logs (actor_id, target_id, action, field_changed, old_value, new_value, ip_address)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([
+            $actorId, $targetId, $action, $fieldChanged, $oldValue, $newValue,
+            $_SERVER['REMOTE_ADDR'] ?? null,
+        ]);
+    } catch (Exception $e) {
+        // Jangan sampai kegagalan audit log menggagalkan aksi utama user.
+        error_log('[audit_logs] gagal mencatat: ' . $e->getMessage());
+    }
+}
