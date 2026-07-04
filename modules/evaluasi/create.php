@@ -93,7 +93,7 @@ require_once __DIR__ . '/../../includes/layout/header.php';
         </div>
         <div class="mb-3">
           <label class="form-label">Deadline Pengisian</label>
-          <input type="date" name="deadline" class="form-control" value="<?= $_POST['deadline']??'' ?>" min="<?= date('Y-m-d') ?>">
+          <input type="date" name="deadline" class="form-control" value="<?= htmlspecialchars($_POST['deadline']??'') ?>" min="<?= date('Y-m-d') ?>">
           <div class="form-text">Kosongkan jika tidak ada batas</div>
         </div>
         <button type="submit" name="simpan" class="btn btn-primary w-100">
