@@ -8,6 +8,7 @@ $role = $user['role_sistem'];
 
 // Handle approve/reject
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    csrfVerify();  // Validate CSRF token
     $approvalId = (int)$_POST['approval_id'];
     $action     = $_POST['action'];
     $catatan    = trim($_POST['catatan'] ?? '');
@@ -16,18 +17,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $ap->execute([$approvalId, $uid]);
     $apRow = $ap->fetch();
 
-    // pastikan approval ini adalah urutan terendah (actionable)
-    $isActionable = false;
-    if ($apRow) {
-      $minQ = $pdo->prepare("SELECT MIN(urutan) FROM approvals WHERE event_id = ? AND status = 'pending'");
-      $minQ->execute([$apRow['event_id']]);
-      $minUrutan = $minQ->fetchColumn();
-      $isActionable = ((int)$apRow['urutan'] === (int)$minUrutan);
-    }
-
-    if ($apRow && $isActionable && in_array($action, ['approved','rejected'])) {
+    if ($apRow && in_array($action, ['approved','rejected'])) {
         $pdo->beginTransaction();
         try {
+            // Lock the approvals row to prevent race conditions
+            $lockStmt = $pdo->prepare("SELECT * FROM approvals WHERE id = ? FOR UPDATE");
+            $lockStmt->execute([$approvalId]);
+            $apRowLocked = $lockStmt->fetch();
+            
+            // Check again if this is still the actionable approval (min urutan)
+            $minQ = $pdo->prepare("SELECT MIN(urutan) FROM approvals WHERE event_id = ? AND status = 'pending'");
+            $minQ->execute([$apRowLocked['event_id']]);
+            $minUrutan = $minQ->fetchColumn();
+            $isActionable = ((int)$apRowLocked['urutan'] === (int)$minUrutan);
+
+            if (!$isActionable) {
+                $pdo->rollBack();
+                setFlash('Approval ini sudah diproses atau sudah tidak actionable.', 'warning');
+                header('Location: ?');
+                exit;
+            }
+
             $pdo->prepare("UPDATE approvals SET status=?, catatan=?, approved_at=NOW() WHERE id=?")
                 ->execute([$action, $catatan, $approvalId]);
 
@@ -41,20 +51,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     'bendahara'       => 'rab_diajukan',
                     'kehumasan'       => 'perijinan',
                     'kepala_sekolah'  => 'disetujui',
-                ][$apRow['tipe_approver']] ?? null;
+                ][$apRowLocked['tipe_approver']] ?? null;
                 if ($nextStatus) {
                     $pdo->prepare("UPDATE events SET status=? WHERE id=?")
-                        ->execute([$nextStatus, $apRow['event_id']]);
+                        ->execute([$nextStatus, $apRowLocked['event_id']]);
                 }
                 // jika tidak ada lagi approval pending untuk event ini, mark final status if applicable
                 $left = $pdo->prepare("SELECT COUNT(*) FROM approvals WHERE event_id=? AND status='pending'");
-                $left->execute([$apRow['event_id']]);
+                $left->execute([$apRowLocked['event_id']]);
                 if ((int)$left->fetchColumn() === 0) {
                     // jika semua approval selesai, set event status ke 'disetujui' jika belum diatur
-                    $pdo->prepare("UPDATE events SET status = 'disetujui' WHERE id = ? AND status NOT IN ('selesai','ditolak')")->execute([$apRow['event_id']]);
+                    $pdo->prepare("UPDATE events SET status = 'disetujui' WHERE id = ? AND status NOT IN ('selesai','ditolak')")->execute([$apRowLocked['event_id']]);
                 }
             } else {
-                $pdo->prepare("UPDATE events SET status='ditolak' WHERE id=?")->execute([$apRow['event_id']]);
+                $pdo->prepare("UPDATE events SET status='ditolak' WHERE id=?")->execute([$apRowLocked['event_id']]);
             }
 
             $pdo->commit();
@@ -69,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Handle buat approval baru (oleh PIC)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buat_approval'])) {
+    csrfVerify();  // Validate CSRF token
     $eventId       = (int)$_POST['event_id'];
     $tipeApprover  = $_POST['tipe_approver'];
     $approverId    = (int)$_POST['approver_id'];

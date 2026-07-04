@@ -45,6 +45,14 @@ if (!file_exists($path)) {
     die('File tidak ditemukan di server.');
 }
 
+// Validate path to prevent directory traversal attacks
+$realPath = realpath($path);
+$uploadDir = realpath(__DIR__ . '/../../uploads/');
+if ($realPath === false || strpos($realPath, $uploadDir) !== 0) {
+    http_response_code(403);
+    die('Akses ditolak (path validation gagal).');
+}
+
 $mime = mime_content_type($path) ?: 'application/octet-stream';
 $isImage = str_starts_with($mime, 'image/');
 $isPdf = $mime === 'application/pdf';

@@ -139,13 +139,19 @@ function topKeywords(array $rows, string $field, int $top = 5): array {
 
 // ── POST: finalize event (PR-05, tombol di tab Evaluasi) ─────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['finalize_event']) && $isPic) {
+    if (empty($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'])) {
+        http_response_code(403);
+        die('CSRF token tidak valid.');
+    }
     $pdo->prepare("UPDATE events SET status='selesai' WHERE id=?")->execute([$id]);
     setFlash('Acara berhasil diselesaikan. Kamu diarahkan ke halaman arsip.', 'success');
-    header('Location: '.BASE_URL.'/modules/events/archive.php?id='.$id); exit;
+    header('Location: '.BASE_URL.'/modules/events/archive.php?id='.$id);
+    exit;
 }
 
 // ── POST: update status ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_status']) && $isPic) {
+    csrfVerify();  // Validate CSRF token
     $ns = $_POST['new_status'];
     if (in_array($ns,['selesai','ditolak'], true)) {
         $pdo->prepare("UPDATE events SET status=? WHERE id=?")->execute([$ns,$id]);
@@ -154,30 +160,37 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_status']) && $is
     } else {
         setFlash('Status tidak valid.', 'danger');
     }
-    header("Location: ?id=$id"); exit;
+    header("Location: ?id=$id");
+    exit;
 }
 
 // ── POST: toggle checklist ────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['toggle_check'])) {
+    csrfVerify();  // Validate CSRF token
     if (!$isAnggota) { http_response_code(403); exit; }
     $cid = (int)$_POST['check_id']; $done = (int)$_POST['is_done'];
     $pdo->prepare("UPDATE event_checklist SET is_done=?,done_by=?,done_at=? WHERE id=? AND event_id=?")
         ->execute([$done,$_SESSION['user_id'],$done?date('Y-m-d H:i:s'):null,$cid,$id]);
-    header("Location: ?id=$id#checklist"); exit;
+    header("Location: ?id=$id#checklist");
+    exit;
 }
 
 // ── POST: save WA group link ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_wa']) && $isPic) {
+    csrfVerify();  // Validate CSRF token
     $pdo->prepare("UPDATE events SET wa_group_link=? WHERE id=?")->execute([trim($_POST['wa_group_link']),$id]);
     setFlash('Link grup WA disimpan.','success');
-    header("Location: ?id=$id"); exit;
+    header("Location: ?id=$id");
+    exit;
 }
 
 // ── POST: save documentation link ────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_doc']) && $isPic) {
+    csrfVerify();  // Validate CSRF token
     $pdo->prepare("UPDATE events SET link_dokumentasi=? WHERE id=?")->execute([trim($_POST['link_dokumentasi']),$id]);
     setFlash('Link dokumentasi disimpan.','success');
-    header("Location: ?id=$id"); exit;
+    header("Location: ?id=$id");
+    exit;
 }
 
 // ── POST: hapus evaluasi (PIC) ──────────────────────────────────────────────────
@@ -1264,10 +1277,12 @@ function kirimReminderWA() {
     toast.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Pesan disalin! Paste di grup WA yang baru dibuka.';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
-  }).catch(() => {
+  }).catch((err) => {
+    console.error('kirimReminderWA: clipboard write failed', err);
     // Fallback: prompt manual copy
     prompt('Salin pesan ini lalu paste di grup WA:', msg);
     window.open(waLink, '_blank');
+    showToast('Gagal menyalin pesan otomatis. Silakan salin manual dan paste di grup WA.', 'warning');
   });
 }
 

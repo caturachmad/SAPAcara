@@ -32,10 +32,20 @@ if (!$canSee && !$isPendingApprover) { http_response_code(403); die('Akses ditol
 $path = __DIR__ . '/../../uploads/' . $file['file_path'];
 if (!file_exists($path)) { http_response_code(404); die('File tidak ditemukan di server.'); }
 
+// Validate path to prevent directory traversal attacks
+$realPath = realpath($path);
+$uploadDir = realpath(__DIR__ . '/../../uploads/');
+if ($realPath === false || strpos($realPath, $uploadDir) !== 0) {
+    http_response_code(403);
+    die('Akses ditolak (path validation gagal).');
+}
+
 $mime = mime_content_type($path) ?: 'application/octet-stream';
+$filename = $file['file_original'] ?: basename($path);
 header('Content-Type: ' . $mime);
-header('Content-Disposition: attachment; filename="' . addslashes($file['file_original']) . '"');
+header('Content-Disposition: attachment; filename*=UTF-8\'\'' . rawurlencode($filename));
 header('Content-Length: ' . filesize($path));
 header('Cache-Control: private, no-cache');
+header('X-Content-Type-Options: nosniff');
 readfile($path);
 exit;

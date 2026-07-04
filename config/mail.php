@@ -1,11 +1,9 @@
 <?php
-define('MAIL_HOST',      'smtp.gmail.com');
-define('MAIL_PORT',      587);
-define('MAIL_USERNAME',  'wiwid8a@gmail.com');  // ← ganti
-define('MAIL_PASSWORD',  'zbzgzjzwqlknwchd');     // ← App Password Gmail (tanpa spasi)
-define('MAIL_FROM',      'wiwid8a@gmail.com');  // ← ganti
-define('MAIL_FROM_NAME', 'SAPAcara – Manajemen Acara Sekolah');
-define('APP_NAME',       'SAPAcara');
+// ⚠️ SECURITY: Email credentials are now loaded from .env via config/db.php
+// DO NOT hardcode credentials here!
+// See .env.example for configuration template.
+
+require_once __DIR__ . '/db.php'; // This includes MAIL_* constants from .env
 
 function sendMail(string $to, string $toName, string $subject, string $html): bool {
     require_once __DIR__ . '/../vendor/autoload.php';

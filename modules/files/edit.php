@@ -91,6 +91,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_file'])) {
                 $errors[] = 'Ukuran file baru max 20MB.';
             }
             if (empty($errors)) {
+                // Validasi isi file (MIME type asli + magic bytes) sebelum replace
+                require_once __DIR__ . '/../../includes/FileUploader.php';
+                foreach (FileUploader::validateContent($f['tmp_name'], $ext) as $ce) {
+                    $errors[] = $ce;
+                }
+            }
+            if (empty($errors)) {
                 $dir = __DIR__ . '/../../uploads/events/' . $eventId . '/';
                 if (!is_dir($dir)) {
                     mkdir($dir, 0755, true);
