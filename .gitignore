@@ -1,9 +1,72 @@
-vendor/
-uploads/events/*/
-uploads/proposals/
-uploads/rab/
-uploads/perijinan/
-*.log
+# Environment variables
 .env
-config/db.php
-config/mail.php
+.env.local
+.env.*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Dependencies
+/vendor
+/node_modules
+composer.lock
+
+# Logs
+/logs
+/var/log
+*.log
+
+# Uploads
+/uploads/*
+!uploads/.gitkeep
+
+# Temporary files
+/tmp
+/temp
+*.tmp
+
+# Database
+*.sql.bak
+database_backup/
+
+# OS Files
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Cache
+/cache
+*.cache
+
+# Deployment
+deploy.key
+deploy_notes.txt
+
+# SSL certificates (if stored locally)
+*.pem
+*.key
+ssl/
+
+# Backups
+*.bak
+*.backup
+*.old
+
+# Python/Node stuff (if applicable)
+__pycache__/
+*.pyc
+.env.*.json
+node_modules/
+
+# IDE workspace
+*.workspace
+.project
+.classpath
